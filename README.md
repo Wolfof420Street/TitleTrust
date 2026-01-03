@@ -9,7 +9,6 @@ The project is divided into two main components:
 *   **[Frontend (Flutter)](frontend/titletrust/README.md)**: A cross-platform mobile application built with Flutter, providing the user interface for document uploads, site verification, and audit results.
 *   **[Backend (FastAPI)](backend/README.md)**: A high-performance python backend powered by FastAPI, handling the AI-driven forensic analysis (Vertex AI) and geospatial verification (Google Maps Platform).
 
-```
 TitleTrust/
 ├── backend/            # FastAPI Server (Python)
 ├── frontend/           # Flutter Mobile App (Dart)
