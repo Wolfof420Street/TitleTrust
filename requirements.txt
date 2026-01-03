@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+google-cloud-aiplatform
+googlemaps
+pydantic
+pydantic-settings
