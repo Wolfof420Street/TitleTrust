@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     VERTEX_AI_LOCATION: str = Field("us-central1", env="VERTEX_AI_LOCATION")
     
     # Model Names
-    FORENSIC_MODEL_NAME: str = "gemini-1.5-pro-001"
-    VISION_MODEL_NAME: str = "gemini-1.5-flash-001"
+    FORENSIC_MODEL_NAME: str = "gemini-2.5-pro"
+    VISION_MODEL_NAME: str = "gemini-2.5-pro"
 
     class Config:
         env_file = ".env"
