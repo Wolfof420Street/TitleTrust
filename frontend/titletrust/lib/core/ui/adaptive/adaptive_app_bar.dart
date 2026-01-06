@@ -38,7 +38,12 @@ class AdaptiveAppBar extends StatelessWidget implements ObstructingPreferredSize
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize {
+    if (Platform.isIOS) {
+      return const Size.fromHeight(44.0); // Default CupertinoNavigationBar height
+    }
+    return const Size.fromHeight(kToolbarHeight);
+  }
 
   @override
   bool shouldFullyObstruct(BuildContext context) {

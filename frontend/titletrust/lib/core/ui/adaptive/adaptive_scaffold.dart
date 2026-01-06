@@ -22,7 +22,18 @@ class AdaptiveScaffold extends StatelessWidget {
       return CupertinoPageScaffold(
         navigationBar: appBar as CupertinoNavigationBar?,
         backgroundColor: backgroundColor,
-        child: body,
+        child: floatingActionButton != null
+            ? Stack(
+                children: [
+                  body,
+                  Positioned(
+                    bottom: 16,
+                    right: 16,
+                    child: SafeArea(child: floatingActionButton!),
+                  ),
+                ],
+              )
+            : body,
       );
     } else {
       return Scaffold(

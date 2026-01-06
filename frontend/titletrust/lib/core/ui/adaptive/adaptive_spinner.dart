@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -9,8 +8,9 @@ class AdaptiveSpinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isIOS) {
-      return const CupertinoActivityIndicator();
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    if (isIOS) {
+      return CupertinoActivityIndicator(color: color);
     } else {
       return CircularProgressIndicator(
         color: color,

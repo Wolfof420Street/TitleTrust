@@ -8,3 +8,5 @@ ios/.generated/
 packages
 .flutter-plugins
 .flutter-plugins-dependencies
+.idea/
+*.iml

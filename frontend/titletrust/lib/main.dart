@@ -14,10 +14,15 @@ import 'features/onboarding/presentation/onboarding_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Warning: .env file not found or invalid. Using defaults.");
+  }
+
   final prefs = await SharedPreferences.getInstance();
-  final text = prefs.getBool('has_seen_onboarding');
-  final showOnboarding = text == null || !text;
+  final hasSeenOnboarding = prefs.getBool('has_seen_onboarding');
+  final showOnboarding = hasSeenOnboarding == null || !hasSeenOnboarding;
 
   runApp(ProviderScope(child: TitleTrustApp(showOnboarding: showOnboarding)));
 }

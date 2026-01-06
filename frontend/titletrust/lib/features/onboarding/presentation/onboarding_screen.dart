@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +16,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   final List<Map<String, String>> _pages = [
     {'title': 'Welcome to TitleTrust', 'body': 'Secure your property with AI-driven forensic analysis.'},
     {'title': 'Forensic Audit', 'body': 'Detect anomalies in Title Deeds and Sale Agreements instantly.'},
@@ -28,15 +33,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await prefs.setBool('has_seen_onboarding', true);
 
     if (mounted) {
+      final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        isIOS
+            ? CupertinoPageRoute(builder: (_) => const HomeScreen())
+            : MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = Platform.isIOS;
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
     return AdaptiveScaffold(
       body: Stack(
         children: [
