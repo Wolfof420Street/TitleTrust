@@ -1,17 +1,29 @@
-from typing import Dict, Any, List
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Optional, Dict, Any
 import uuid
 
-from .models import AuditRequest, Document, DocumentType, GeoCheck
-from .forensic_engine import perform_forensic_audit
-from .geospatial_engine import vision_map_sync
+from models import AuditRequest, Document, DocumentType, GeoCheck
+from forensic_engine import perform_forensic_audit
+from geospatial_engine import vision_map_sync
+from auth import get_current_user
 
 app = FastAPI(title="TitleTrust API", version="1.0.0")
+
+# Configure CORS middleware
+# For production, replace ["*"] with specific frontend domains
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins for testing
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 @app.post("/audit/forensic", response_model=dict)
 async def create_forensic_audit(
     files: List[UploadFile] = File(...),
+    user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Uploads a 'Deal Pack' of documents (Title Deed, Green Card, etc.) for forensic analysis.
@@ -42,7 +54,7 @@ async def create_forensic_audit(
     # Create Request
     audit_request = AuditRequest(
         request_id=request_id,
-        user_id="user_demo", # authenticated user in real app
+        user_id=user["uid"], # Authenticated user ID
         documents=documents,
         status="PROCESSING"
     )
@@ -60,7 +72,8 @@ async def create_forensic_audit(
 async def create_geospatial_audit(
     lat: float = Form(...),
     lng: float = Form(...),
-    image: UploadFile = File(...)
+    image: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Uploads a site photo/video frame + coords for Vision-Map Sync.

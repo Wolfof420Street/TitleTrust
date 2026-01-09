@@ -12,12 +12,25 @@ import 'features/forensic/presentation/forensic_screen.dart';
 import 'features/geospatial/presentation/geospatial_screen.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+
+import 'features/auth/presentation/auth_controller.dart';
+import 'features/auth/presentation/login_screen.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
     debugPrint("Warning: .env file not found or invalid. Using defaults.");
+  }
+
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("Firebase init failed: $e");
+    // In a real app, you might want to show a simple error UI without ProviderScope if this fails critical
+    // For now, we proceed so app can at least launch (maybe offline mode)
   }
 
   final prefs = await SharedPreferences.getInstance();
@@ -34,11 +47,14 @@ class TitleTrustApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // If onboarding is needed, show it. Otherwise, show AuthGuard.
+    final Widget homeWidget = showOnboarding ? const OnboardingScreen() : const AuthGuard();
+
     if (Platform.isIOS) {
       return CupertinoApp(
         title: 'TitleTrust',
         theme: AppTheme.iosTheme,
-        home: showOnboarding ? const OnboardingScreen() : const HomeScreen(),
+        home: homeWidget,
         debugShowCheckedModeBanner: false,
       );
     } else {
@@ -46,10 +62,25 @@ class TitleTrustApp extends StatelessWidget {
         title: 'TitleTrust',
         theme: AppTheme.androidTheme,
         darkTheme: AppTheme.androidDarkTheme,
-        home: showOnboarding ? const OnboardingScreen() : const HomeScreen(),
+        home: homeWidget,
         debugShowCheckedModeBanner: false,
       );
     }
+  }
+}
+
+class AuthGuard extends ConsumerWidget {
+  const AuthGuard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      data: (user) => user != null ? const HomeScreen() : const LoginScreen(),
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (err, stack) => Scaffold(body: Center(child: Text("Error: $err"))),
+    );
   }
 }
 
