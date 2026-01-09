@@ -50,5 +50,5 @@ EXPOSE 8080
 # --bind 0.0.0.0:$PORT binds to the Cloud Run injected port
 # --workers 1 is recommended for Cloud Run (auto-scaling handles concurrency)
 # --worker-class uvicorn.workers.UvicornWorker for async FastAPI support
-# --timeout 0 for long-running requests (adjust as needed)
+# --timeout 330 for long-running requests (adjust as needed)
 CMD exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 330 --graceful-timeout 30 main:app

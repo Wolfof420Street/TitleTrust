@@ -11,7 +11,6 @@ from auth import get_current_user
 app = FastAPI(title="TitleTrust API", version="1.0.0")
 
 # Configure CORS middleware
-# Configure CORS middleware
 from config import settings
 import os
 
