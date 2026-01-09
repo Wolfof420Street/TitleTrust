@@ -25,19 +25,24 @@ gcloud builds submit --tag="${IMAGE_NAME}" --project="${PROJECT_ID}" backend/
    ```bash
    gcloud services enable run.googleapis.com
    gcloud services enable containerregistry.googleapis.com
-   gcloud services enable artifactregistry.googleapis.com
+   # Optional: Enable Artifact Registry if migrating from Container Registry
+   # gcloud services enable artifactregistry.googleapis.com
    ```
 
 2. **Granted Cloud Build Permissions:**
    ```bash
+   # Define variables
+   export PROJECT_ID="your-project-id"
+   export CLOUD_BUILD_SA="[PROJECT_NUMBER]@cloudbuild.gserviceaccount.com"
+
    # Permission to deploy to Cloud Run
-   gcloud projects add-iam-policy-binding titletrust-f5bf6 \
-     --member="serviceAccount:195028169730@cloudbuild.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+     --member="serviceAccount:${CLOUD_BUILD_SA}" \
      --role="roles/run.admin"
    
    # Permission to act as service account
-   gcloud projects add-iam-policy-binding titletrust-f5bf6 \
-     --member="serviceAccount:195028169730@cloudbuild.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+     --member="serviceAccount:${CLOUD_BUILD_SA}" \
      --role="roles/iam.serviceAccountUser"
    ```
 
@@ -45,7 +50,7 @@ gcloud builds submit --tag="${IMAGE_NAME}" --project="${PROJECT_ID}" backend/
 
 ## Current Service Account Permissions
 
-The Cloud Build service account (`195028169730@cloudbuild.gserviceaccount.com`) now has:
+The Cloud Build service account now has:
 
 - ✅ `roles/cloudbuild.builds.builder` - Build containers
 - ✅ `roles/run.admin` - Deploy to Cloud Run
@@ -63,6 +68,6 @@ All prerequisites are now configured. Retry the deployment:
 
 This should now:
 1. ✅ Build the container image successfully
-2. ✅ Push to Google Container Registry
+2. ✅ Push to Google Container Registry (or Artifact Registry if configured)
 3. ✅ Deploy to Cloud Run with environment variables
 4. ✅ Return a public URL for your API

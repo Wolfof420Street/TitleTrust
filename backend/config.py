@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     
     # Model Names
     FORENSIC_MODEL_NAME: str = "gemini-2.5-pro"
-    VISION_MODEL_NAME: str = "gemini-2.5-flash"
+    VISION_MODEL_NAME: str = "gemini-2.5-flash-preview-09-2025"
 
     class Config:
         env_file = ".env"

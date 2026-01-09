@@ -11,13 +11,20 @@ from auth import get_current_user
 app = FastAPI(title="TitleTrust API", version="1.0.0")
 
 # Configure CORS middleware
-# For production, replace ["*"] with specific frontend domains
+# Configure CORS middleware
+from config import settings
+import os
+
+# Read allowed origins from env or default to safe list
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for testing
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.post("/audit/forensic", response_model=dict)
