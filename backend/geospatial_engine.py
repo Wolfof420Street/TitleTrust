@@ -1,8 +1,8 @@
 from typing import Dict, Optional, List
 import googlemaps
 from vertexai.generative_models import GenerativeModel, Part
-from .models import GeoCheck
-from .config import settings
+from models import GeoCheck
+from config import settings
 
 # Initialize Google Maps Client
 gmaps = googlemaps.Client(key=settings.MAPS_API_KEY)

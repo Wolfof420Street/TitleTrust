@@ -1,0 +1,56 @@
+# .dockerignore - Exclude unnecessary files from Docker build
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+
+# Environment files (secrets should be passed via Cloud Run env vars)
+.env
+.env.*
+
+# Frontend (not needed for backend deployment)
+frontend/
+
+# Tests (can be excluded from production image)
+tests/

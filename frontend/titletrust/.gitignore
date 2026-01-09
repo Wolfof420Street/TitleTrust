@@ -10,3 +10,7 @@ packages
 .flutter-plugins-dependencies
 .idea/
 *.iml
+
+# Firebase Config (Sensitive)
+google-services.json
+GoogleService-Info.plist

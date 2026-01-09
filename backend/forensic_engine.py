@@ -3,8 +3,8 @@ from typing import List, Dict, Any, Optional
 import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part, SafetySetting
-from .models import Document, AuditRequest, DocumentType
-from .config import settings
+from models import Document, AuditRequest, DocumentType
+from config import settings
 
 # Initialize Vertex AI
 vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.VERTEX_AI_LOCATION)

@@ -8,3 +8,4 @@ pydantic-settings
 gunicorn
 pillow
 opencv-python-headless
+firebase-admin

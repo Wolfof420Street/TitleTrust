@@ -1,4 +1,4 @@
-package com.example.titletrust
+package com.wolf.titletrust
 
 import io.flutter.embedding.android.FlutterActivity
 

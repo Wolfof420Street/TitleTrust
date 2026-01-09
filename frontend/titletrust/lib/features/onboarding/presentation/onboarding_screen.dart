@@ -36,8 +36,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
       Navigator.of(context).pushReplacement(
         isIOS
-            ? CupertinoPageRoute(builder: (_) => const HomeScreen())
-            : MaterialPageRoute(builder: (_) => const HomeScreen()),
+            ? CupertinoPageRoute(builder: (_) => const AuthGuard())
+            : MaterialPageRoute(builder: (_) => const AuthGuard()),
       );
     }
   }
