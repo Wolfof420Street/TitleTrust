@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -12,9 +13,13 @@ class AuthInterceptor extends Interceptor {
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         // Log error but proceed without token if fetching fails
-        // print("AuthInterceptor: Failed to get token: $e");
+        developer.log(
+          "AuthInterceptor: Failed to get token",
+          error: e,
+          stackTrace: stackTrace,
+        );
       }
     }
 

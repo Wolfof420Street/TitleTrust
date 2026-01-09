@@ -25,7 +25,13 @@ Future<void> main() async {
     debugPrint("Warning: .env file not found or invalid. Using defaults.");
   }
 
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("Firebase init failed: $e");
+    // In a real app, you might want to show a simple error UI without ProviderScope if this fails critical
+    // For now, we proceed so app can at least launch (maybe offline mode)
+  }
 
   final prefs = await SharedPreferences.getInstance();
   final hasSeenOnboarding = prefs.getBool('has_seen_onboarding');
