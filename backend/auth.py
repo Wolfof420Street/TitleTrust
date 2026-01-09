@@ -10,6 +10,10 @@ if not firebase_admin._apps:
 
 security = HTTPBearer()
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
     """
     Validates the Firebase ID Token in the Authorization header.
@@ -17,11 +21,23 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     """
     token = credentials.credentials
     try:
-        decoded_token = auth.verify_id_token(token)
-        return decoded_token
-    except Exception as e:
-        # In production, might want to log the error but return generic 401
+        # Verify the ID token
+        return auth.verify_id_token(token)
+    except (auth.InvalidIdTokenError, auth.ExpiredIdTokenError) as e:
+        logger.warning(f"Authentication failed: {e}")
         raise HTTPException(
             status_code=401,
             detail="Invalid authentication credentials"
-        )
+        ) from e
+    except auth.AuthError as e:
+        logger.error(f"Firebase Auth infrastructure error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service unavailable"
+        ) from e
+    except Exception as e:
+        logger.error(f"Unexpected authentication error: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication failed"
+        ) from e
