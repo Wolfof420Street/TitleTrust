@@ -39,3 +39,35 @@ class AuditRequest(BaseModel):
     findings: List[str] = [] # List of "Red Flags" or human-readable findings
     geo_check: Optional[GeoCheck] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+class ForgeryRiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+class VisualAnomaly(BaseModel):
+    description: str = Field(..., description="Description of the visual flaw (e.g., 'Pixelated crest')")
+    severity: str = Field(..., description="High, Medium, or Low")
+    location: str = Field(..., description="Where on the document this occurs")
+
+class VerificationStep(BaseModel):
+    step_name: str = Field(..., description="The action taken (e.g., 'Registrar Verification')")
+    evidence_found: str = Field(..., description="What was found via Search or Code Execution")
+    status: str = Field(..., description="PASS or FAIL")
+
+class ForensicReport(BaseModel):
+    title_number: str = Field(..., description="The extracted title number")
+    risk_score: int = Field(..., description="0 to 100 risk score")
+    final_verdict: str = Field(..., description="AUTHENTIC, SUSPICIOUS, or FORGERY")
+    reasoning_summary: str = Field(..., description="The chain of thought leading to this conclusion")
+    visual_anomalies: List[VisualAnomaly]
+    investigation_steps: List[VerificationStep]
+
+class LiveTokenRequest(BaseModel):
+    session_id: str
+    lat: float
+    lng: float
+    title_number: str
+    expected_size: str
+    user_name: str = "Surveyor"

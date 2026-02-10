@@ -10,12 +10,15 @@ import 'core/ui/adaptive/adaptive_app_bar.dart';
 import 'core/ui/adaptive/adaptive_scaffold.dart';
 import 'features/forensic/presentation/forensic_screen.dart';
 import 'features/geospatial/presentation/geospatial_screen.dart';
+import 'features/investigation/presentation/marathon_start_screen.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 
 import 'features/auth/presentation/auth_controller.dart';
 import 'features/auth/presentation/login_screen.dart';
+import 'core/services/notification_service.dart';
+import 'features/home/presentation/widgets/job_tracker_widget.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,13 +32,17 @@ Future<void> main() async {
     await Firebase.initializeApp();
   } catch (e) {
     debugPrint("Firebase init failed: $e");
-    // In a real app, you might want to show a simple error UI without ProviderScope if this fails critical
-    // For now, we proceed so app can at least launch (maybe offline mode)
   }
 
   final prefs = await SharedPreferences.getInstance();
   final hasSeenOnboarding = prefs.getBool('has_seen_onboarding');
   final showOnboarding = hasSeenOnboarding == null || !hasSeenOnboarding;
+
+  try {
+    // Notification service initialization
+  } catch (e) {
+    debugPrint("Notification init error: $e");
+  }
 
   runApp(ProviderScope(child: TitleTrustApp(showOnboarding: showOnboarding)));
 }
@@ -47,19 +54,20 @@ class TitleTrustApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // If onboarding is needed, show it. Otherwise, show AuthGuard.
+    NotificationService().initialize();
+
     final Widget homeWidget = showOnboarding ? const OnboardingScreen() : const AuthGuard();
 
     if (Platform.isIOS) {
       return CupertinoApp(
-        title: 'TitleTrust',
+        title: 'VeriLand',
         theme: AppTheme.iosTheme,
         home: homeWidget,
         debugShowCheckedModeBanner: false,
       );
     } else {
       return MaterialApp(
-        title: 'TitleTrust',
+        title: 'VeriLand',
         theme: AppTheme.androidTheme,
         darkTheme: AppTheme.androidDarkTheme,
         home: homeWidget,
@@ -91,62 +99,235 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(title: 'TitleTrust Agent'),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _FeatureCard(
-              title: "Forensic Document Audit",
-              icon: Icons.manage_search,
-              color: Colors.blue.shade100,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForensicScreen())),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.blue.shade50,
+              Colors.purple.shade50,
+              Colors.pink.shade50,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const JobTrackerWidget(),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Intelligence Suite',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.grey.shade800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'AI-powered property verification',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _FeatureCard(
+                    title: "Forensic Document Audit",
+                    subtitle: "Deep analysis of property documents",
+                    icon: Icons.manage_search,
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.blue.shade600],
+                    ),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForensicScreen())),
+                  ),
+                  const SizedBox(height: 16),
+                  _FeatureCard(
+                    title: "Autonomous Due Diligence",
+                    subtitle: "Automated investigation workflows",
+                    icon: Icons.auto_mode,
+                    gradient: LinearGradient(
+                      colors: [Colors.purple.shade400, Colors.purple.shade600],
+                    ),
+                    onTap: () =>
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MarathonStartScreen())),
+                  ),
+                  const SizedBox(height: 16),
+                  _FeatureCard(
+                    title: "Geospatial Reality Check",
+                    subtitle: "Satellite verification & mapping",
+                    icon: Icons.satellite_alt,
+                    gradient: LinearGradient(
+                      colors: [Colors.green.shade400, Colors.green.shade600],
+                    ),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GeospatialScreen())),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-            _FeatureCard(
-              title: "Geospatial Reality Check",
-              icon: Icons.satellite_alt,
-              color: Colors.green.shade100,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GeospatialScreen())),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _FeatureCard extends StatelessWidget {
+class _FeatureCard extends StatefulWidget {
   final String title;
+  final String subtitle;
   final IconData icon;
-  final Color color;
+  final Gradient gradient;
   final VoidCallback onTap;
 
   const _FeatureCard({
     required this.title,
+    required this.subtitle,
     required this.icon,
-    required this.color,
+    required this.gradient,
     required this.onTap,
   });
 
   @override
+  State<_FeatureCard> createState() => _FeatureCardState();
+}
+
+class _FeatureCardState extends State<_FeatureCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 300,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 48, color: Colors.black87),
-            const SizedBox(height: 16),
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-          ],
-        ),
+      onTapDown: (_) {
+        _controller.forward();
+      },
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () {
+        _controller.reverse();
+      },
+      child: AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: widget.gradient,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.gradient.colors.first.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  children: [
+                    // Glassmorphic overlay
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withOpacity(0.2),
+                              Colors.white.withOpacity(0.05),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Content
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(
+                              widget.icon,
+                              size: 32,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.title,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.subtitle,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white.withOpacity(0.8),
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -24,6 +24,7 @@ dependencies:
   
   # Hardware & Maps
   image_picker: ^1.0.7
+  file_picker: ^8.0.0
   camera: ^0.10.5+9
   geolocator: ^10.1.0
   google_maps_flutter: ^2.5.3
@@ -33,6 +34,8 @@ dependencies:
   firebase_auth: ^5.5.4
   google_sign_in: ^6.2.1
   firebase_core: ^3.13.1
+  cloud_firestore: ^5.6.12
+  firebase_messaging: ^15.2.10
 
 dev_dependencies:
   flutter_test:
@@ -46,9 +49,31 @@ dev_dependencies:
   riverpod_lint: ^2.3.10
   freezed: ^2.4.6
   json_serializable: ^6.7.1
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo_light.png"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#ffffff"
+  background_image: "assets/bg_light.png"
+  image: "assets/logo_light.png"
+  color_dark: "#1A1A1A"
+  background_image_dark: "assets/bg_dark.png"
+  image_dark: "assets/logo_dark.png"
+  android_12:
+    color: "#ffffff"
+    image: "assets/logo_light.png"
+    color_dark: "#1A1A1A"
+    image_dark: "assets/logo_dark.png"
 
 flutter:
   uses-material-design: true
 
   assets:
     - .env
+    - assets/

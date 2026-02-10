@@ -1,0 +1,13 @@
+# TitleTrust: Demo Video Script (60 Seconds)
+
+| Time | Visual Scene | Audio / Voiceover |
+| :--- | :--- | :--- |
+| **0:00 - 0:10** | **[Scene 1: The Problem]**<br>Rapid montage of news headlines: "Fake Title Deeds," "Land Scams," "Air Supply."<br>Cut to a user looking stressed, holding a paper Title Deed. | **VO:** "In Kenya, buying land is a gamble. One in three title deeds is fake. The due diligence process takes 30 days and costs thousands... by the time you find the truth, your money is gone." |
+| **0:10 - 0:25** | **[Scene 2: Feature A - The Digital Lawyer]**<br>User opens **TitleTrust App** -> Taps **"Forensic Audit"** -> Uploads PDF.<br>*Zoom in on screen:* "Analyzing Legal Hierarchy..."<br>*Split Screen:* Show scrolling **"Thinking Logs"** where the AI says: *"Grant No. matches 1995 Land Act but signature is from 2002. Identifying contradiction..."* | **VO:** "Enter TitleTrust. An autonomous due diligence agent powered by Gemini 3. <br>Our 'Digital Lawyer' doesn't just read; it uses Gemini's **Deep Thinking** mode to reason through complex legal contradictions that standard AI misses." |
+| **0:25 - 0:40** | **[Scene 3: Feature B - The Omniscient Surveyor]**<br>User switches to **"Site Visit"** mode. Panning camera across a plot of land.<br>*Overlay:* **"LIVE API CONNECTED"**.<br>The AI Voice speaks *while* video streams: *"I see the boundary beacon on the left, but notice the neighbor's fence is 3 meters inside your plot. This is an encroachment."* | **VO:** "And for the first time, we verify reality. Using Gemini 3's **Multimodal Live API**, the 'Omniscient Surveyor' sees what you see in real-time. It cross-references live video with satellite data to spot encroachments instantly." |
+| **0:40 - 0:50** | **[Scene 4: The Tech Stack]**<br>Fast animation of the architecture: Flutter Mobile -> FastAPI Backend -> Gemini 3 Pro (Thinking) + Gemini 3 Flash (Vision).<br>Flash text: **"Real-Time Latency: <200ms"** | **VO:** "Built with Flutter and FastAPI, orchestrated by the new Google GenAI SDK. We moved from static databases to active agentic reasoning." |
+| **0:50 - 1:00** | **[Scene 5: Conclusion]**<br>Screen shows **"Risk Score: 12/100 (Safe)"**.<br>User smiles, shakes hands with seller.<br>Logo: **TitleTrust** + **Built with Gemini**. | **VO:** "Don't just trust. Verify. <br>**TitleTrust.** Powered by Gemini 3. <br>Building trust, one acre at a time." |
+
+## Production Notes
+*   **Scene 2 (Thinking Logs):** Make sure the text is readable. Highlight keywords like "Contradiction" or "Forgery" in red.
+*   **Scene 3 (Live API):** Use a "Waveform" visual effect when the AI speaks to emphasize it is a live conversation, not a pre-recording.

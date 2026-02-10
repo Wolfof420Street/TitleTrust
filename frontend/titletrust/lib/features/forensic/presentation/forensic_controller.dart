@@ -1,4 +1,5 @@
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/forensic_models.dart';
 import '../data/forensic_repository.dart';
@@ -13,15 +14,21 @@ class ForensicController extends _$ForensicController {
   }
 
   Future<void> submitDocuments() async {
-    final picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
 
-    if (images.isEmpty) return;
+    if (result == null || result.files.isEmpty) return;
+
+    // Convert PlatformFile to XFile for repository compatibility
+    final List<XFile> files = result.files.where((f) => f.path != null).map((f) => XFile(f.path!)).toList();
 
     state = const AsyncLoading();
 
     state = await AsyncValue.guard(() async {
-      return ref.read(forensicRepositoryProvider).uploadDocuments(images);
+      return ref.read(forensicRepositoryProvider).uploadDocuments(files);
     });
   }
 }

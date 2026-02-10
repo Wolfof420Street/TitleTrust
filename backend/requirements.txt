@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 python-multipart
-google-cloud-aiplatform
+google-genai
 googlemaps
 pydantic
 pydantic-settings
@@ -9,3 +9,9 @@ gunicorn
 pillow
 opencv-python-headless
 firebase-admin
+requests>=2.32.3
+certifi>=2024.12.14
+cryptography>=41.0.0
+tenacity
+google-cloud-tasks
+

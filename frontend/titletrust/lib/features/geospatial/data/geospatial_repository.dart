@@ -17,11 +17,11 @@ class GeospatialRepository {
 
   GeospatialRepository(this._dio);
 
-  Future<GeoCheck> verifySite(double lat, double lng, XFile imageFile) async {
+  Future<GeoCheck> verifySite(double lat, double lng, XFile file) async {
     final formData = FormData.fromMap({
       'lat': lat,
       'lng': lng,
-      'image': await MultipartFile.fromFile(imageFile.path, filename: 'site_capture.jpg'),
+      'file': await MultipartFile.fromFile(file.path, filename: file.name),
     });
 
     final response = await _dio.post(

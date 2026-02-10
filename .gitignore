@@ -1,0 +1,42 @@
+# System
+.DS_Store
+Thumbs.db
+
+# Python
+*.py[cod]
+__pycache__/
+*.so
+.Python
+backend/venv/
+backend/.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Firebase & Secrets (CRITICAL)
+*-firebase-adminsdk-*.json
+google-services.json
+GoogleService-Info.plist
+firebase.json
+.firebaserc
+firestore.indexes.json
+firestore.rules
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log

@@ -3,10 +3,10 @@ from firebase_admin import auth
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# Initialize Firebase Admin
-# Uses Application Default Credentials (ADC) in Cloud Run
-if not firebase_admin._apps:
-    firebase_admin.initialize_app()
+from services.firebase import initialize_firebase
+
+# Ensure Firebase is initialized
+initialize_firebase()
 
 security = HTTPBearer()
 
