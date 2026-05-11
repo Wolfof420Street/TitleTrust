@@ -20,9 +20,20 @@ from config import settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [TOOLS] - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Initialize Google Maps Client
-# Production: Fail fast if Key is missing
-gmaps = googlemaps.Client(key=settings.MAPS_API_KEY)
+# Lazy-load Google Maps Client to allow imports without API key
+_gmaps_client = None
+
+def _get_gmaps_client() -> Optional[googlemaps.Client]:
+    """Lazy-load Google Maps client on first use."""
+    global _gmaps_client
+    if _gmaps_client is None:
+        if settings.MAPS_API_KEY:
+            try:
+                _gmaps_client = googlemaps.Client(key=settings.MAPS_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to initialize Google Maps client: {e}")
+                _gmaps_client = False  # Sentinel for failed initialization
+    return _gmaps_client if _gmaps_client is not False else None
 
 # ==========================================
 # 1. LEGAL & FORMAT TOOLS
@@ -145,7 +156,8 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
     """
     logger.info(f"Querying Maps API for: {lat}, {lng}")
     
-    if not gmaps:
+    gmaps_client = _get_gmaps_client()
+    if not gmaps_client:
         return {"error": "Maps API not configured."}
 
     context = {
@@ -156,7 +168,7 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
 
     try:
         # 1. Reverse Geocode (What is the legal address?)
-        reverse = gmaps.reverse_geocode((lat, lng))
+        reverse = gmaps_client.reverse_geocode((lat, lng))
         if reverse:
             context["formatted_address"] = reverse[0].get('formatted_address', 'Unknown')
             # Extract types (e.g., 'park', 'political', 'establishment')
@@ -164,7 +176,7 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
 
         # 2. Nearby Search (Are we near sensitive features?)
         # We search 200m radius for protected features
-        places = gmaps.places_nearby(
+        places = gmaps_client.places_nearby(
             location=(lat, lng), 
             radius=200, 
             type=['natural_feature', 'park', 'school', 'hospital', 'church']

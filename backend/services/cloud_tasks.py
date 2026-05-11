@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Optional
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
@@ -57,5 +58,3 @@ class CloudTasksService:
             logger.info(f"🚀 Tasks Scheduled: {response.name}")
         except Exception as e:
             logger.error(f"❌ Failed to schedule task: {e}")
-
-import time

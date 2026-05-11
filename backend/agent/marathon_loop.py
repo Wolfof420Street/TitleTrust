@@ -106,23 +106,27 @@ class AgentDecision(BaseModel):
 
 
 # --- Production-Ready Marathon Loop ---
-from services.sync_service import FirebaseSyncService
+try:
+    from backend.repositories.session_repository import SessionRepository
+    from backend.services.sync_service import FirebaseSyncService
+    from backend.services.firebase import db
+except ModuleNotFoundError:
+    from repositories.session_repository import SessionRepository
+    from services.sync_service import FirebaseSyncService
+    from services.firebase import db
 
-# ... (imports)
 
-# --- Production-Ready Marathon Loop ---
 class MarathonLoop:
     def __init__(
         self, 
-        db: firestore.Client, 
+        db_instance: firestore.Client, 
         session_id: str,
         config: Optional[AgentConfig] = None,
         gemini_api_key: str = None,
         model_name: str = "gemini-3-flash-preview"
     ):
-        self.db = db
+        self._sessions = SessionRepository(db_instance)
         self.session_id = session_id
-        self.ref = db.collection("sessions").document(session_id)
         self.config = config or AgentConfig()
         self.model_name = model_name
         
@@ -131,8 +135,8 @@ class MarathonLoop:
         
         # Fetch owner_id for notifications
         try:
-            doc = self.ref.get()
-            self.owner_id = doc.get("user_id") if doc.exists else None
+            session_data = self._sessions.get(session_id)
+            self.owner_id = session_data.get("user_id") if session_data else None
         except:
             self.owner_id = None
         
@@ -151,10 +155,9 @@ class MarathonLoop:
         self.logger = logging.LoggerAdapter(logger, {'session_id': session_id})
 
     def load_state(self) -> MarathonState:
-        """Loads state from Firestore"""
-        doc = self.ref.get()
-        if doc.exists:
-            data = doc.to_dict()
+        """Loads state from repository"""
+        data = self._sessions.get(self.session_id)
+        if data:
             if "session_id" not in data:
                 data["session_id"] = self.session_id
             # Handle legacy/missing fields gracefully
@@ -162,9 +165,9 @@ class MarathonLoop:
         return MarathonState(session_id=self.session_id)
 
     def save_state(self, state: MarathonState):
-        """Persists state to Firestore"""
+        """Persists state to repository"""
         state.last_update = time.time()
-        self.ref.set(state.model_dump(), merge=True)
+        self._sessions.update(self.session_id, state.model_dump())
 
     def truncate_memory_item(self, item: str, max_chars: int = 500) -> str:
         """Prevent single memory items from bloating context"""

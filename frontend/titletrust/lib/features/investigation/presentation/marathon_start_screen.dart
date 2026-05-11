@@ -36,15 +36,15 @@ class _MarathonStartScreenState extends ConsumerState<MarathonStartScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final sessionId = await ref.read(marathonServiceProvider).startInvestigation(_selectedFile!);
+      final result = await ref.read(marathonServiceProvider).startInvestigation(_selectedFile!);
 
       // PERSIST JOB STATE
-      await ref.read(jobStateServiceProvider).setActiveJob(sessionId);
+      await ref.read(jobStateServiceProvider).setActiveJob(result.sessionId);
 
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => InvestigationScreen(sessionId: sessionId)),
+          MaterialPageRoute(builder: (_) => InvestigationScreen(sessionId: result.sessionId)),
         );
       }
     } catch (e) {

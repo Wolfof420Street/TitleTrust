@@ -1,17 +1,51 @@
-fastapi
-uvicorn[standard]
-python-multipart
-google-genai
-googlemaps
-pydantic
-pydantic-settings
-gunicorn
-pillow
-opencv-python-headless
-firebase-admin
+# FastAPI & Web
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+gunicorn==23.0.0
+
+# GCP & Google APIs
+google-cloud-aiplatform==1.67.0
+google-cloud-tasks==2.18.0
+google-genai==1.2.0
+googlemaps==4.10.0
+firebase-admin==6.6.0
+
+# Security & Auth
+cryptography==44.0.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# Data Processing
+pillow==11.1.0
+opencv-python-headless==4.10.0.84
 requests>=2.32.3
 certifi>=2024.12.14
-cryptography>=41.0.0
-tenacity
-google-cloud-tasks
+
+# Async & Queuing
+tenacity==9.0.0
+redis==5.2.1
+
+# Observability - Metrics
+prometheus-client==0.21.1
+
+# Observability - Core Tracing (stable versions with matching instrumentation)
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation==0.50b0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-requests==0.50b0
+
+# Observability - Exporters (OTLP is the modern standard)
+opentelemetry-exporter-otlp==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0
+
+# Development & Testing
+pytest==7.4.3
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+
+
+
+
 

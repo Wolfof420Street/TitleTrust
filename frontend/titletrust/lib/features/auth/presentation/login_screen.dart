@@ -44,11 +44,11 @@ class LoginScreen extends ConsumerWidget {
                   ),
                 ),
               if (state.hasError)
-                Padding(
-                  padding: const EdgeInsets.only(top: 24),
+                const Padding(
+                  padding: EdgeInsets.only(top: 24),
                   child: Text(
-                    "Error: ${state.error}",
-                    style: const TextStyle(color: Colors.red),
+                    "Sign-in failed. Please retry.",
+                    style: TextStyle(color: Colors.red),
                     textAlign: TextAlign.center,
                   ),
                 ),

@@ -1,0 +1,104 @@
+# Gitleaks configuration for TitleTrust
+title = "TitleTrust Secret Scanning Config"
+description = "Detects leaked secrets: API keys, tokens, credentials, private keys"
+version = "v2"
+
+[[rules]]
+id = "firebase-api-key"
+description = "Firebase API Key"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+keywords = ["firebase", "AIza"]
+severity = "high"
+
+[[rules]]
+id = "gcp-service-account"
+description = "GCP Service Account JSON"
+regex = '''("type":\s*"service_account"|"private_key_id":|"private_key":)'''
+keywords = ["service_account", "private_key_id"]
+severity = "critical"
+
+[[rules]]
+id = "jwt-token"
+description = "JWT Token"
+regex = '''eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[\w-]+'''
+keywords = ["eyJ", "Bearer", "jwt"]
+severity = "high"
+
+[[rules]]
+id = "aws-secret-key"
+description = "AWS Secret Access Key"
+regex = '''aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}'''
+keywords = ["aws_secret_access_key", "AKIA"]
+severity = "critical"
+
+[[rules]]
+id = "github-pat"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[0-9a-zA-Z]{36}'''
+keywords = ["ghp_", "github_pat"]
+severity = "critical"
+
+[[rules]]
+id = "slack-token"
+description = "Slack Bot Token"
+regex = '''xox[baprs]-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*'''
+keywords = ["xoxb", "xoxp", "xoxa", "xoxr"]
+severity = "high"
+
+[[rules]]
+id = "private-key-rsa"
+description = "RSA Private Key"
+regex = '''-----BEGIN RSA PRIVATE KEY-----'''
+keywords = ["BEGIN RSA PRIVATE KEY"]
+severity = "critical"
+
+[[rules]]
+id = "private-key-ec"
+description = "EC Private Key"
+regex = '''-----BEGIN EC PRIVATE KEY-----'''
+keywords = ["BEGIN EC PRIVATE KEY"]
+severity = "critical"
+
+[[rules]]
+id = "private-key-openssh"
+description = "OpenSSH Private Key"
+regex = '''-----BEGIN OPENSSH PRIVATE KEY-----'''
+keywords = ["BEGIN OPENSSH PRIVATE KEY"]
+severity = "critical"
+
+[[rules]]
+id = "mongodb-connection-string"
+description = "MongoDB Connection String"
+regex = '''mongodb\+srv://[^/]+:[^@]+@[a-zA-Z0-9.-]+'''
+keywords = ["mongodb+srv://"]
+severity = "high"
+
+[[rules]]
+id = "database-password"
+description = "Database Connection with Password"
+regex = '''(password|passwd|pwd)\s*=\s*['"][^'"]+['"]'''
+keywords = ["password", "passwd", "pwd"]
+severity = "high"
+
+# Exclusions to reduce false positives
+[allowlist]
+files = [
+  "(.*?)\\.sum$",
+  "(.*?)\\.lock$",
+  "(.*?)\\.log$",
+  "package-lock.json",
+  "yarn.lock",
+  "poetry.lock",
+  "Pipfile.lock",
+]
+commits = [
+  "^NOCHECK.*",
+  "^TEST.*",
+  "^DEMO.*",
+]
+paths = [
+  "test_data/",
+  "samples/",
+  "fixtures/",
+  ".github/workflows/",
+]

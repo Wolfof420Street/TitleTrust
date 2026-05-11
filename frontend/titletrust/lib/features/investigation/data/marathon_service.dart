@@ -1,35 +1,27 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:titletrust/core/network/network_executor.dart';
 import 'package:titletrust/core/network/dio_client.dart';
+import 'package:titletrust/features/investigation/data/marathon_models.dart';
 
 class MarathonService {
   final Dio _dio;
+  final NetworkExecutor _executor;
 
-  MarathonService(this._dio);
+  MarathonService(this._dio, this._executor);
 
-  Future<String> startInvestigation(File file) async {
+  Future<InvestigationStartResponse> startInvestigation(File file) async {
     final fileName = file.path.split('/').last;
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(file.path, filename: fileName),
     });
-
-    try {
-      // Endpoint /audit/start returns { session_id: "...", status: "..." }
-      final response = await _dio.post('/audit/start', data: formData);
-
-      if (response.statusCode == 200) {
-        return response.data['session_id'];
-      } else {
-        throw Exception("Failed to start investigation: ${response.statusMessage}");
-      }
-    } on DioException catch (e) {
-      throw Exception("Network Error: ${e.message}");
-    }
+    final response = await _executor.run(() => _dio.post('/audit/start', data: formData));
+    return InvestigationStartResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
 }
 
 final marathonServiceProvider = Provider<MarathonService>((ref) {
   final dio = ref.watch(dioProvider);
-  return MarathonService(dio);
+  return MarathonService(dio, const NetworkExecutor());
 });

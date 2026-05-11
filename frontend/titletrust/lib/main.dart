@@ -3,7 +3,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/ui/adaptive/adaptive_app_bar.dart';
@@ -19,9 +21,13 @@ import 'features/auth/presentation/auth_controller.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'core/services/notification_service.dart';
 import 'features/home/presentation/widgets/job_tracker_widget.dart';
+import 'package:titletrust/security/transport_security_service.dart';
+import 'package:titletrust/telemetry/frontend_telemetry_service.dart';
+import 'package:titletrust/core/services/secure_storage_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final telemetry = FrontendTelemetryService();
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
@@ -39,12 +45,50 @@ Future<void> main() async {
   final showOnboarding = hasSeenOnboarding == null || !hasSeenOnboarding;
 
   try {
-    // Notification service initialization
+    await NotificationService().initialize();
   } catch (e) {
     debugPrint("Notification init error: $e");
   }
 
-  runApp(ProviderScope(child: TitleTrustApp(showOnboarding: showOnboarding)));
+  try {
+    await telemetry.initialize();
+    await telemetry.recordNetworkQuality();
+    await telemetry.recordStartupTiming(const Duration(milliseconds: 0));
+  } catch (e) {
+    debugPrint("Telemetry init error: $e");
+  }
+
+  try {
+    final transportSecurity = TransportSecurityService(const SecureStorageService(FlutterSecureStorage()));
+    transportSecurity.installCertificatePinning(
+      allowedFingerprints: {
+        if (dotenv.env['API_CERT_FINGERPRINTS'] != null)
+          ...dotenv.env['API_CERT_FINGERPRINTS']!
+              .split(',')
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty),
+      },
+    );
+    await transportSecurity.ensureRequestSecret();
+  } catch (e) {
+    debugPrint("Transport security init error: $e");
+  }
+
+  final app = ProviderScope(child: TitleTrustApp(showOnboarding: showOnboarding));
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+  if (sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.tracesSampleRate = 0.2;
+        options.enableAutoSessionTracking = true;
+        options.environment = const String.fromEnvironment('APP_ENV', defaultValue: 'development');
+      },
+      appRunner: () => runApp(app),
+    );
+  } else {
+    runApp(app);
+  }
 }
 
 class TitleTrustApp extends StatelessWidget {
@@ -54,8 +98,6 @@ class TitleTrustApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    NotificationService().initialize();
-
     final Widget homeWidget = showOnboarding ? const OnboardingScreen() : const AuthGuard();
 
     if (Platform.isIOS) {
@@ -87,7 +129,9 @@ class AuthGuard extends ConsumerWidget {
     return authState.when(
       data: (user) => user != null ? const HomeScreen() : const LoginScreen(),
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (err, stack) => Scaffold(body: Center(child: Text("Error: $err"))),
+      error: (_, __) => const Scaffold(
+        body: Center(child: Text("Authentication unavailable. Please retry.")),
+      ),
     );
   }
 }

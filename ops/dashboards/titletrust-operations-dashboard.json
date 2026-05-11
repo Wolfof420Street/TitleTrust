@@ -1,0 +1,55 @@
+{
+  "title": "TitleTrust Operations Dashboard",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["titletrust", "operations", "security"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests",
+      "targets": [
+        {"expr": "sum by (method, path, status) (rate(titletrust_http_requests_total[5m]))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Latency",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(titletrust_http_request_latency_ms_bucket[5m])))"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(titletrust_http_request_latency_ms_bucket[5m])))"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(titletrust_http_request_latency_ms_bucket[5m])))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Adaptive Abuse Assessments",
+      "targets": [
+        {"expr": "sum by (action, tenant_id) (rate(titletrust_abuse_assessments_total[5m]))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Adaptive Abuse Scores",
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, tenant_id) (rate(titletrust_abuse_score_bucket[5m])))"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Abuse Blocks",
+      "targets": [
+        {"expr": "sum by (tenant_id, path) (rate(titletrust_abuse_blocks_total[5m]))"}
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Security Health Snapshot",
+      "targets": [
+        {"expr": "sum(rate(titletrust_abuse_assessments_total[5m]))", "legendFormat": "assessments/sec"},
+        {"expr": "sum(rate(titletrust_abuse_blocks_total[5m]))", "legendFormat": "blocks/sec"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "TitleTrust",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "titletrust-dev",
+  "workspaceFolder": "/workspaces/TitleTrust",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspaces/TitleTrust,type=bind"
+  ],
+  "postCreateCommand": "bash backend/scripts/bootstrap_backend.sh",
+  "postStartCommand": "docker-compose up -d redis",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter",
+        "ms-vscode.makefile-tools",
+        "eamodio.gitlens",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.formatting.provider": "black",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.python",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  },
+  "forwardPorts": [
+    8000,
+    6379
+  ],
+  "portsAttributes": {
+    "8000": {
+      "label": "Backend API",
+      "onAutoForward": "notify"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    }
+  }
+}
