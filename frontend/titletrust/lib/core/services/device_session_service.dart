@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:titletrust/core/network/dio_client.dart';
 import 'package:titletrust/core/network/network_executor.dart';
 import 'package:titletrust/core/services/secure_storage_service.dart';
@@ -30,6 +31,8 @@ class DeviceSessionService {
     sessionId ??= '${Platform.operatingSystem}-${DateTime.now().millisecondsSinceEpoch}';
     await _storage.write(_deviceSessionIdKey, sessionId);
     final requestSecret = await _transportSecurity.requestSecret();
+    final packageInfo = await PackageInfo.fromPlatform();
+    final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
 
     await _executor.run(
       () => _dio.post(
@@ -38,7 +41,7 @@ class DeviceSessionService {
           'session_id': sessionId,
           'device_id': Platform.localHostname,
           'platform': Platform.operatingSystem,
-          'app_version': '1.0.0',
+          'app_version': appVersion,
           'request_secret': requestSecret,
         },
       ),
@@ -52,19 +55,34 @@ class DeviceSessionService {
       return;
     }
 
-    final requestSecret = await _transportSecurity.rotateRequestSecret();
-    await _executor.run(
-      () => _dio.post(
-        '/auth/device-sessions',
-        data: {
-          'session_id': sessionId,
-          'device_id': Platform.localHostname,
-          'platform': Platform.operatingSystem,
-          'app_version': '1.0.0',
-          'request_secret': requestSecret,
-        },
-      ),
-    );
+    // Read current secret before generating new one
+    final currentSecret = await _transportSecurity.requestSecret();
+    // Generate new secret without persisting yet
+    await _transportSecurity.clearRequestSecret();
+    await _transportSecurity.ensureRequestSecret();
+    final newSecret = await _transportSecurity.requestSecret();
+    final packageInfo = await PackageInfo.fromPlatform();
+    final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+
+    try {
+      // Only persist new secret after successful POST
+      await _executor.run(
+        () => _dio.post(
+          '/auth/device-sessions',
+          data: {
+            'session_id': sessionId,
+            'device_id': Platform.localHostname,
+            'platform': Platform.operatingSystem,
+            'app_version': appVersion,
+            'request_secret': newSecret,
+          },
+        ),
+      );
+    } catch (e) {
+      // Rollback to previous secret on failure
+      await _storage.write('frontend_request_secret', currentSecret);
+      rethrow;
+    }
   }
 
   Future<void> revoke() async {

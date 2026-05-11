@@ -51,11 +51,6 @@ class DeviceSecurityService {
     try {
       final authenticated = await _localAuth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: true,
-          useErrorDialogs: true,
-        ),
       );
       if (authenticated) {
         await _storage.write(_biometricGateKey, 'true');

@@ -49,11 +49,21 @@ class _MarathonStartScreenState extends ConsumerState<MarathonStartScreen> {
         );
       }
     } catch (e, stackTrace) {
-      await FrontendTelemetryService().reportHandledError(
-        e,
-        stackTrace,
-        context: 'marathon_start_failed',
-      );
+      // Isolate telemetry errors so snackbar always displays
+      try {
+        await Future.wait([
+          FrontendTelemetryService().reportHandledError(
+            e,
+            stackTrace,
+            context: 'marathon_start_failed',
+          ),
+        ]).timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => <void>[],
+        );
+      } catch (_) {
+        // Ignore telemetry failures; proceed to user-facing recovery
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Operation failed. Please try again.')),

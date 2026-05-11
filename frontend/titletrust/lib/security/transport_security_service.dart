@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:titletrust/core/services/secure_storage_service.dart';
@@ -24,10 +24,15 @@ class TransportSecurityService {
     if (existing != null && existing.isNotEmpty) {
       return;
     }
-    final secret = base64UrlEncode(
-      utf8.encode('${DateTime.now().microsecondsSinceEpoch}:${Platform.localHostname}:$kDebugMode'),
-    );
-    await _storage.write(_requestSecretKey, secret);
+    try {
+      // Use cryptographically secure random for 256-bit key
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      final secret = base64UrlEncode(values);
+      await _storage.write(_requestSecretKey, secret);
+    } on UnsupportedError catch (e) {
+      throw Exception('Random.secure() unavailable on this platform: $e');
+    }
   }
 
   Future<String> requestSecret() async {
@@ -49,7 +54,9 @@ class TransportSecurityService {
     if (allowedFingerprints.isEmpty) {
       return;
     }
-
+    // Implements certificate pinning via HttpOverrides that validates
+    // X509Certificate on every TLS handshake. This provides protection
+    // by checking certificate fingerprints before accepting connections.
     HttpOverrides.global = _PinnedHttpOverrides(allowedFingerprints);
   }
 
@@ -114,7 +121,24 @@ class RequestSigningInterceptor extends Interceptor {
     if (body is String) {
       return sha256.convert(utf8.encode(body)).toString();
     }
-    return sha256.convert(utf8.encode(jsonEncode(body))).toString();
+    if (body is FormData) {
+      // Hash FormData fields and files deterministically
+      final buffer = StringBuffer();
+      for (final field in body.fields) {
+        buffer.write('${field.key}:${field.value}|');
+      }
+      for (final file in body.files) {
+        buffer.write('${file.key}:${file.value.filename}|');
+      }
+      return sha256.convert(utf8.encode(buffer.toString())).toString();
+    }
+    if (body is MultipartFile) {
+      // Hash MultipartFile by filename + known length if available
+      final filename = body.filename ?? '';
+      return sha256.convert(utf8.encode('$filename:${body.length}')).toString();
+    }
+    // Fallback: hash string representation to avoid JsonUnsupportedObjectError
+    return sha256.convert(utf8.encode(body.toString())).toString();
   }
 
   static String _generateCorrelationId() {
