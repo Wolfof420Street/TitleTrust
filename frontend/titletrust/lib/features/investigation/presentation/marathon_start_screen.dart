@@ -7,6 +7,7 @@ import 'package:titletrust/core/ui/adaptive/adaptive_scaffold.dart';
 import 'package:titletrust/features/investigation/data/marathon_service.dart';
 import 'package:titletrust/features/investigation/presentation/investigation_screen.dart';
 import 'package:titletrust/core/services/job_state_service.dart';
+import 'package:titletrust/telemetry/frontend_telemetry_service.dart';
 
 class MarathonStartScreen extends ConsumerStatefulWidget {
   const MarathonStartScreen({super.key});
@@ -47,9 +48,16 @@ class _MarathonStartScreenState extends ConsumerState<MarathonStartScreen> {
           MaterialPageRoute(builder: (_) => InvestigationScreen(sessionId: result.sessionId)),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      await FrontendTelemetryService().reportHandledError(
+        e,
+        stackTrace,
+        context: 'marathon_start_failed',
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Operation failed. Please try again.')),
+        );
       }
     } finally {
       if (mounted) {

@@ -83,5 +83,16 @@ void main() {
       expect(firstSecret, isNotEmpty);
       expect(firstSecret, secondSecret);
     });
+
+    test('rotates the request secret', () async {
+      final storage = InMemorySecureStorageService();
+      final service = TransportSecurityService(storage);
+
+      final firstSecret = await service.requestSecret();
+      final rotatedSecret = await service.rotateRequestSecret();
+
+      expect(rotatedSecret, isNotEmpty);
+      expect(rotatedSecret, isNot(firstSecret));
+    });
   });
 }

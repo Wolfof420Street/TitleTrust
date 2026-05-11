@@ -39,6 +39,12 @@ class TransportSecurityService {
     await _storage.delete(_requestSecretKey);
   }
 
+  Future<String> rotateRequestSecret() async {
+    await clearRequestSecret();
+    await ensureRequestSecret();
+    return (await _storage.read(_requestSecretKey))!;
+  }
+
   void installCertificatePinning({Set<String> allowedFingerprints = const {}}) {
     if (allowedFingerprints.isEmpty) {
       return;
@@ -54,8 +60,12 @@ class TransportSecurityService {
 
 class RequestSigningInterceptor extends Interceptor {
   final Future<String> Function() requestSecretProvider;
+  final Future<String?> Function()? deviceSessionIdProvider;
 
-  RequestSigningInterceptor({required this.requestSecretProvider});
+  RequestSigningInterceptor({
+    required this.requestSecretProvider,
+    this.deviceSessionIdProvider,
+  });
 
   @override
   Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
@@ -67,6 +77,10 @@ class RequestSigningInterceptor extends Interceptor {
       body: options.data,
       correlationId: options.headers['X-Correlation-ID']?.toString(),
     );
+    final deviceSessionId = await deviceSessionIdProvider?.call();
+    if (deviceSessionId != null && deviceSessionId.isNotEmpty) {
+      signedHeaders['X-Device-Session-ID'] = deviceSessionId;
+    }
     options.headers.addAll(signedHeaders);
     handler.next(options);
   }

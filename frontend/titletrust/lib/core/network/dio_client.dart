@@ -44,6 +44,10 @@ Dio dio(Ref ref) {
         final transport = TransportSecurityService(ref.read(secureStorageServiceProvider));
         return transport.requestSecret();
       },
+      deviceSessionIdProvider: () {
+        final storage = ref.read(secureStorageServiceProvider);
+        return storage.read('device_session_id');
+      },
     ),
   );
   return dio;
