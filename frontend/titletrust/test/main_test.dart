@@ -19,8 +19,8 @@ void main() {
       expect(find.byType(MaterialApp), findsOneWidget);
     });
 
-    testWidgets('starts at login screen for unauthenticated user',
-        (WidgetTester tester) async {
+    testWidgets('redirects unauthenticated users to AuthGuard',
+      (WidgetTester tester) async {
       // Arrange & Act
       await tester.pumpWidget(_buildApp());
       await tester.pumpAndSettle();

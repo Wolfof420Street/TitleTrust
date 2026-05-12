@@ -52,17 +52,6 @@ void main() {
       expect(find.byType(LoginScreen), findsOneWidget);
     });
 
-    testWidgets('layout elements are visible',
-        (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ProviderScope(child: LoginScreen()),
-        ),
-      );
-
-      // Key elements should be visible
-      expect(find.byIcon(Icons.security), findsOneWidget);
-      expect(find.text('TitleTrust Agent'), findsOneWidget);
-    });
+    // Removed redundant test: layout elements are already asserted above.
   });
 }

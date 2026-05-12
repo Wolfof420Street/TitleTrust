@@ -25,23 +25,34 @@ class DeviceSessionService {
   final TransportSecurityService _transportSecurity;
   final NetworkExecutor _executor;
   static const String _deviceSessionIdKey = 'device_session_id';
+  static const String _frontendRequestSecretKey = 'frontend_request_secret';
 
   DeviceSessionService(this._dio, this._storage, this._transportSecurity, this._executor);
 
   Future<void> register() async {
     var sessionId = await _storage.read(_deviceSessionIdKey);
-    sessionId ??= '${Platform.operatingSystem}-${DateTime.now().millisecondsSinceEpoch}';
-    await _storage.write(_deviceSessionIdKey, sessionId);
+    if (sessionId == null || sessionId.isEmpty) {
+      sessionId = _generateUuidV4();
+      await _storage.write(_deviceSessionIdKey, sessionId);
+    }
     final requestSecret = await _transportSecurity.requestSecret();
     final packageInfo = await PackageInfo.fromPlatform();
     final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+
+    String deviceId;
+    try {
+      deviceId = Platform.localHostname;
+      if (deviceId.isEmpty) deviceId = sessionId;
+    } catch (_) {
+      deviceId = sessionId;
+    }
 
     await _executor.run(
       () => _dio.post(
         '/auth/device-sessions',
         data: {
           'session_id': sessionId,
-          'device_id': Platform.localHostname,
+          'device_id': deviceId,
           'platform': Platform.operatingSystem,
           'app_version': appVersion,
           'request_secret': requestSecret,
@@ -78,7 +89,7 @@ class DeviceSessionService {
         ),
       );
       // Only persist new secret after successful POST
-      await _storage.write('frontend_request_secret', newSecret);
+      await _storage.write(_frontendRequestSecretKey, newSecret);
     } catch (e) {
       // On failure, the old secret remains persisted and can be reused for retry
       rethrow;
@@ -100,9 +111,32 @@ class DeviceSessionService {
     if (sessionId == null || sessionId.isEmpty) {
       return;
     }
-    await _executor.run(() => _dio.post('/auth/device-sessions/$sessionId/revoke'));
-    await _storage.delete(_deviceSessionIdKey);
-    // Also delete the request secret so the client cannot reuse the signing key
-    await _storage.delete('frontend_request_secret');
+    try {
+      await _executor.run(() => _dio.post('/auth/device-sessions/$sessionId/revoke'));
+    } catch (e) {
+      // Swallow network errors for best-effort local cleanup
+    } finally {
+      await _storage.delete(_deviceSessionIdKey);
+      // Also delete the request secret so the client cannot reuse the signing key
+      await _storage.delete(_frontendRequestSecretKey);
+    }
+  }
+
+  String _generateUuidV4() {
+    // Generate 16 random bytes and format as UUID v4
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    // Set variant and version bits per RFC 4122
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
+    String hex(int i) => bytes[i].toRadixString(16).padLeft(2, '0');
+    final parts = [
+      List.generate(4, (i) => hex(i)).join(),
+      List.generate(2, (i) => hex(i + 4)).join(),
+      List.generate(2, (i) => hex(i + 6)).join(),
+      List.generate(2, (i) => hex(i + 8)).join(),
+      List.generate(6, (i) => hex(i + 10)).join(),
+    ];
+    return parts.join('-');
   }
 }
