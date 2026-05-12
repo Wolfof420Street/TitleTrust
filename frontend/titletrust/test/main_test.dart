@@ -11,7 +11,7 @@ Widget _buildApp() {
 
 void main() {
   group('TitleTrust App', () {
-    testWidgets('app initializes with correct theme', (WidgetTester tester) async {
+    testWidgets('app initializes with MaterialApp', (WidgetTester tester) async {
       // Arrange & Act
       await tester.pumpWidget(_buildApp());
 
@@ -29,7 +29,7 @@ void main() {
       expect(find.byType(AuthGuard), findsOneWidget);
     });
 
-    testWidgets('theme uses proper color scheme', (WidgetTester tester) async {
+    testWidgets('theme is configured', (WidgetTester tester) async {
       // Arrange & Act
       await tester.pumpWidget(_buildApp());
 
@@ -48,12 +48,6 @@ void main() {
           as MaterialApp;
       expect(materialApp.title, equals('VeriLand'));
     });
-
-    testWidgets('app is responsive to orientation changes',
-        (WidgetTester tester) async {
-      // This test is deferred - requires more complex setup
-      expect(true, true);
-    });
   });
 
   group('App Navigation', () {
@@ -64,41 +58,16 @@ void main() {
       // Assert
       expect(find.byType(Navigator), findsOneWidget);
     });
-
-    testWidgets('home screen is the initial route', (WidgetTester tester) async {
-      // Arrange & Act
-      await tester.pumpWidget(_buildApp());
-      await tester.pumpAndSettle();
-
-      // Assert
-      expect(true, true);
-    });
   });
 
   group('App Lifecycle', () {
-    testWidgets('app initializes required services on startup',
+    testWidgets('renders ProviderScope on startup',
         (WidgetTester tester) async {
       // Arrange & Act
       await tester.pumpWidget(_buildApp());
 
       // Assert
       expect(find.byType(ProviderScope), findsOneWidget);
-    });
-
-    testWidgets('telemetry is initialized', (WidgetTester tester) async {
-      // Arrange & Act
-      await tester.pumpWidget(_buildApp());
-
-      // Assert
-      expect(true, true);
-    });
-
-    testWidgets('error handling is configured', (WidgetTester tester) async {
-      // Arrange & Act
-      await tester.pumpWidget(_buildApp());
-
-      // Assert
-      expect(true, true);
     });
   });
 }

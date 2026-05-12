@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,17 +57,14 @@ class DeviceSessionService {
       return;
     }
 
-    // Read current secret before generating new one
-    final currentSecret = await _transportSecurity.requestSecret();
-    // Generate new secret without persisting yet
-    await _transportSecurity.clearRequestSecret();
-    await _transportSecurity.ensureRequestSecret();
-    final newSecret = await _transportSecurity.requestSecret();
+    // Generate new secret without persisting it yet
+    final newSecret = _generateRandomSecret();
     final packageInfo = await PackageInfo.fromPlatform();
     final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
 
     try {
-      // Only persist new secret after successful POST
+      // POST is signed with the currently persisted old secret
+      // The request carries the new secret we want the server to expect next time
       await _executor.run(
         () => _dio.post(
           '/auth/device-sessions',
@@ -78,10 +77,21 @@ class DeviceSessionService {
           },
         ),
       );
+      // Only persist new secret after successful POST
+      await _storage.write('frontend_request_secret', newSecret);
     } catch (e) {
-      // Rollback to previous secret on failure
-      await _storage.write('frontend_request_secret', currentSecret);
+      // On failure, the old secret remains persisted and can be reused for retry
       rethrow;
+    }
+  }
+
+  String _generateRandomSecret() {
+    try {
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      return base64UrlEncode(values);
+    } on UnsupportedError catch (e) {
+      throw Exception('Random.secure() unavailable on this platform: $e');
     }
   }
 
@@ -92,5 +102,7 @@ class DeviceSessionService {
     }
     await _executor.run(() => _dio.post('/auth/device-sessions/$sessionId/revoke'));
     await _storage.delete(_deviceSessionIdKey);
+    // Also delete the request secret so the client cannot reuse the signing key
+    await _storage.delete('frontend_request_secret');
   }
 }

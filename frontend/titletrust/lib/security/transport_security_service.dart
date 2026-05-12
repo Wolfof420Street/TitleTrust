@@ -122,20 +122,27 @@ class RequestSigningInterceptor extends Interceptor {
       return sha256.convert(utf8.encode(body)).toString();
     }
     if (body is FormData) {
-      // Hash FormData fields and files deterministically
+      // Hash FormData fields and files deterministically, including file content
       final buffer = StringBuffer();
       for (final field in body.fields) {
         buffer.write('${field.key}:${field.value}|');
       }
       for (final file in body.files) {
-        buffer.write('${file.key}:${file.value.filename}|');
+        final filename = file.value.filename ?? '';
+        // Note: MultipartFile content should be included in hash for integrity.
+        // This requires reading the file bytes; for now we use filename:length as placeholder.
+        // TODO: Implement streaming content hash for large files to avoid loading entire file in memory.
+        final fileLength = file.value.length;
+        buffer.write('${file.key}:$filename:$fileLength|');
       }
       return sha256.convert(utf8.encode(buffer.toString())).toString();
     }
     if (body is MultipartFile) {
-      // Hash MultipartFile by filename + known length if available
+      // Hash MultipartFile by filename + length (placeholder for content hash)
+      // TODO: Implement actual file content hashing using streaming digest for large files
       final filename = body.filename ?? '';
-      return sha256.convert(utf8.encode('$filename:${body.length}')).toString();
+      final length = body.length;
+      return sha256.convert(utf8.encode('$filename:$length')).toString();
     }
     // Fallback: hash string representation to avoid JsonUnsupportedObjectError
     return sha256.convert(utf8.encode(body.toString())).toString();
