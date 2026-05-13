@@ -29,6 +29,8 @@ class GeoCheck(BaseModel):
     user_video_description: Optional[str] = None
     satellite_analysis_result: str
     risk_level: str # LOW, MEDIUM, CRITICAL
+    trace_id: Optional[str] = None
+    evidence_sha256: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
 class AuditRequest(BaseModel):
@@ -63,6 +65,8 @@ class ForensicReport(BaseModel):
     reasoning_summary: str = Field(..., description="The chain of thought leading to this conclusion")
     visual_anomalies: List[VisualAnomaly]
     investigation_steps: List[VerificationStep]
+    trace_id: Optional[str] = None
+    evidence_sha256: Optional[str] = None
 
 class LiveTokenRequest(BaseModel):
     session_id: str

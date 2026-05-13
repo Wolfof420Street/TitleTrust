@@ -2,6 +2,7 @@ import logging
 import json
 import googlemaps
 import uuid
+import hashlib
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -11,27 +12,36 @@ from google.genai import types
 
 # Configuration
 try:
-    from config import settings
+    from backend.config import settings
 except ImportError:
-    # Fallback/Mock for standalone testing
-    class Settings:
-        GCP_PROJECT_ID = "titletrust-f5bf6"
-        VERTEX_AI_LOCATION = "us-central1"
-        MAPS_API_KEY = "dummy"
-        FORENSIC_MODEL_NAME = "gemini-3-pro-preview"
-    settings = Settings()
+    try:
+        from config import settings
+    except ImportError:
+        # Fallback/Mock for standalone testing
+        class Settings:
+            GCP_PROJECT_ID = "titletrust-f5bf6"
+            VERTEX_AI_LOCATION = "us-central1"
+            MAPS_API_KEY = "dummy"
+            FORENSIC_MODEL_NAME = "gemini-3-pro-preview"
+        settings = Settings()
 
 # Import models for the adapter
 try:
-    from models import GeoCheck
+    from backend.models import GeoCheck
 except ImportError:
-    pass
+    try:
+        from models import GeoCheck
+    except ImportError:
+        pass
 
 # Import Centralized Tools
 try:
-    from agent.tools import get_satellite_ground_truth
+    from backend.agent.tools import get_satellite_ground_truth
 except ImportError:
-    pass
+    try:
+        from agent.tools import get_satellite_ground_truth
+    except ImportError:
+        pass
 
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [GEO-AGENT] - %(message)s")
@@ -71,6 +81,11 @@ class GeoVerificationAgent:
         2. **Verify**: CALL `get_satellite_ground_truth` with the provided GPS to see what the map says *should* be there.
         3. **Reason**: Detect Land Fraud (Encroachment, Grabbing, Spoofing) by comparing Vision vs. Map Data.
         </mission>
+
+        <chain_of_verification>
+        Use Chain of Verification (CoVe): identify each location claim, verify it against map or vision evidence, and only then synthesize the verdict.
+        If encroachment is detected, lead with that risk in the final reasoning rather than softening it.
+        </chain_of_verification>
         """
 
     def verify_location_integrity(self, file_path: str, lat: float, lng: float) -> Dict[str, Any]:
@@ -135,7 +150,22 @@ class GeoVerificationAgent:
         # Parse Final Result
         if final_json:
             try:
-                return json.loads(final_json)
+                result = json.loads(final_json)
+                result["trace_id"] = f"geo-{uuid.uuid4().hex[:12]}"
+                result["evidence_sha256"] = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "file_path": file_path,
+                            "lat": lat,
+                            "lng": lng,
+                            "response": result,
+                            "response_text": response.text if hasattr(response, "text") else None,
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
+                return result
             except json.JSONDecodeError:
                 return {"error": "Failed to parse Agent JSON", "raw": final_json}
         

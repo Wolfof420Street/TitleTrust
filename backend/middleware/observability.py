@@ -21,6 +21,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
         request.state.correlation_id = correlation_id
+        trace_id = None
         start = time.perf_counter()
         if TRACER:
             with TRACER.start_as_current_span(request.url.path) as span:
@@ -28,11 +29,14 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
                 span.set_attribute("correlation_id", correlation_id)
                 response = await call_next(request)
                 span.set_attribute("http.status_code", response.status_code)
+                trace_id = f"{span.get_span_context().trace_id:032x}"
         else:
             response = await call_next(request)
         elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
         response.headers["X-Correlation-ID"] = correlation_id
         response.headers["X-Response-Time-Ms"] = str(elapsed_ms)
+        if trace_id:
+            response.headers["X-Trace-ID"] = trace_id
         REQUEST_COUNT.labels(request.method, request.url.path, str(response.status_code)).inc()
         REQUEST_LATENCY.labels(request.method, request.url.path).observe(elapsed_ms)
         logger.info(
@@ -43,6 +47,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
                 "status": response.status_code,
                 "latency_ms": elapsed_ms,
                 "correlation_id": correlation_id,
+                "trace_id": trace_id,
             },
         )
         return response

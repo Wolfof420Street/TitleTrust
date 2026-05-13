@@ -98,6 +98,9 @@ class TokenRepository:
             data = doc.to_dict()
             stored_hash = data.get("token_hash")
             provided_hash = hash_refresh_token(refresh_token)
+            if not isinstance(stored_hash, (str, bytes)) or not stored_hash:
+                logger.warning("Token %s missing or invalid token_hash", token_id)
+                return None
 
             # Verify hash matches
             if not hmac.compare_digest(stored_hash, provided_hash):

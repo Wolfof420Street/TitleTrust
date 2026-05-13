@@ -1,20 +1,18 @@
-"""
-OpenTelemetry initialization for TitleTrust backend.
-Configures tracing, metrics, and logging exporters.
-"""
-
 import os
 import logging
 from typing import Optional
 
+from fastapi import FastAPI
+
 try:
     from opentelemetry import trace, metrics
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.exporter.gcp_trace import CloudTraceExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
+    from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import SimpleMetricReader
-    from opentelemetry.exporter.gcp_trace import CloudTraceExporter as MetricsExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.requests import RequestsInstrumentor
 except ImportError:
@@ -22,7 +20,6 @@ except ImportError:
     trace = None
     metrics = None
     TracerProvider = None
-    CloudTraceExporter = None
     FastAPIInstrumentor = None
     RequestsInstrumentor = None
 
@@ -30,12 +27,13 @@ logger = logging.getLogger("TitleTrust-Telemetry")
 
 
 def init_tracing(
+    app: FastAPI,
     service_name: str = "titletrust-backend",
     service_namespace: str = "titletrust",
     environment: str = "development",
 ) -> Optional[TracerProvider]:
     """
-    Initialize OpenTelemetry tracing with GCP Cloud Trace exporter.
+    Initialize OpenTelemetry tracing with OTLP exporter.
     
     Args:
         service_name: The name of the service
@@ -45,37 +43,39 @@ def init_tracing(
     Returns:
         TracerProvider instance or None if tracing is not available
     """
-    if not trace or not CloudTraceExporter:
+    if not trace or not TracerProvider:
         logger.warning("OpenTelemetry not fully installed. Tracing disabled.")
         return None
 
     try:
-        gcp_project_id = os.environ.get("GCP_PROJECT_ID")
-        
-        # Create trace exporter
-        if gcp_project_id:
-            trace_exporter = CloudTraceExporter(project_id=gcp_project_id)
-            logger.info(f"Configured GCP Cloud Trace exporter for project {gcp_project_id}")
+        resource = Resource.create(
+            {
+                "service.name": service_name,
+                "service.namespace": service_namespace,
+                "deployment.environment": environment,
+            }
+        )
+        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if otlp_endpoint:
+            trace_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            span_processor = BatchSpanProcessor(trace_exporter)
+            logger.info(f"Configured OTLP trace exporter for {otlp_endpoint}")
         else:
-            logger.warning("GCP_PROJECT_ID not set. Tracing disabled.")
+            logger.warning("Tracing exporter not configured. Set OTEL_EXPORTER_OTLP_ENDPOINT.")
             return None
 
-        # Create tracer provider
-        trace_provider = TracerProvider()
-        trace_provider.add_span_processor(SimpleSpanProcessor(trace_exporter))
-        
-        # Set global tracer provider
+        trace_provider = TracerProvider(resource=resource)
+        trace_provider.add_span_processor(span_processor)
         trace.set_tracer_provider(trace_provider)
-        
-        # Instrument popular libraries
+
         if FastAPIInstrumentor:
-            FastAPIInstrumentor().instrument()
+            FastAPIInstrumentor.instrument_app(app)
             logger.debug("Instrumented FastAPI")
-        
+
         if RequestsInstrumentor:
             RequestsInstrumentor().instrument()
             logger.debug("Instrumented requests library")
-        
+
         logger.info("OpenTelemetry tracing initialized successfully")
         return trace_provider
 
@@ -101,7 +101,11 @@ def init_metrics(
         return None
 
     try:
-        meter_provider = MeterProvider()
+        readers = []
+        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if otlp_endpoint:
+            readers.append(PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=otlp_endpoint)))
+        meter_provider = MeterProvider(metric_readers=readers)
         
         # Set global meter provider
         metrics.set_meter_provider(meter_provider)
@@ -115,6 +119,7 @@ def init_metrics(
 
 
 def initialize_telemetry(
+    app: FastAPI,
     service_name: str = "titletrust-backend",
     service_namespace: str = "titletrust",
     environment: str = "development",
@@ -133,7 +138,7 @@ def initialize_telemetry(
     }
 
     # Initialize tracing
-    trace_provider = init_tracing(service_name, service_namespace, environment)
+    trace_provider = init_tracing(app, service_name, service_namespace, environment)
     if trace_provider:
         result["tracing_enabled"] = True
         result["trace_provider"] = trace_provider

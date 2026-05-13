@@ -1,60 +1,64 @@
 # TitleTrust
 
-**TitleTrust** is a comprehensive solution for secure and reliable land title verification and auditing. By combining advanced forensic analysis with geospatial technology, TitleTrust provides a robust platform for detecting fraud and verifying asset authenticity.
+TitleTrust is a mobile-first property verification platform for secure document review, geospatial checks, and long-running forensic investigations. The repository is structured so the Flutter client, FastAPI backend, workers, and observability stack can evolve independently without losing traceability or operational control.
 
-## Project Structure
+## Architecture
 
-The project is divided into two main components:
-
-*   **[Frontend (Flutter)](frontend/titletrust/README.md)**: A cross-platform mobile application built with Flutter, providing the user interface for document uploads, site verification, and audit results.
-*   **[Backend (FastAPI)](backend/README.md)**: A high-performance python backend powered by FastAPI, handling the AI-driven forensic analysis (Vertex AI) and geospatial verification (Google Maps Platform).
-
-TitleTrust/
-├── backend/            # FastAPI Server (Python)
-├── frontend/           # Flutter Mobile App (Dart)
-├── tests/              # Integration Tests
-├── requirements.txt    # Backend Dependencies
-└── verify_titletrust.py # Verification Script
+```mermaid
+flowchart LR
+	App[Flutter mobile app] --> Auth[Firebase Auth + device-session signing]
+	App --> API[FastAPI backend]
+	API --> FS[Firestore]
+	API --> Q[Redis queue / worker runtime]
+	Q --> Gemini[Gemini / Vertex AI]
+	API --> OTEL[OpenTelemetry + structured logs]
+	API --> K8s[Kubernetes / HPA]
 ```
 
-## Quick Start
 
-To run the full stack locally, you will need two terminal sessions.
 
-### 1. Start the Backend
-Navigate to the root directory and run:
+## Getting Started
+
+The repo contains two independently runnable applications:
+
+* Backend: [backend/main.py](backend/main.py)
+* Frontend: [frontend/titletrust/lib/main.dart](frontend/titletrust/lib/main.dart)
+
+Backend quick start:
 
 ```bash
-# Create/Activate Virtual Env
 python -m venv venv
 source venv/bin/activate
-
-# Install Deps
 pip install -r requirements.txt
-
-# Run Server
 uvicorn backend.main:app --reload
 ```
-*The backend runs on `http://localhost:8000`*
 
-### 2. Start the Frontend
-Navigate to the frontend directory:
+Frontend quick start:
 
 ```bash
 cd frontend/titletrust
-
-# Get Deps
 flutter pub get
-
-# Generate Code
 dart run build_runner build --delete-conflicting-outputs
-
-# Run App  
 flutter run
 ```
 
-## Documentation
+## Testing
 
-*   [AI Land Fraud Verification Plan](AI%20Land%20Fraud%20Verification%20Plan.pdf): Detailed project proposal and architecture plan.
-*   [Frontend Documentation](frontend/titletrust/README.md)
-*   [Backend Documentation](backend/README.md)
+The repo already includes backend unit and integration coverage plus a small Flutter test suite. 
+Recommended commands:
+
+```bash
+pytest backend/tests -q
+flutter test
+```
+
+## API Documentation
+
+The backend uses FastAPI, so the generated OpenAPI surface is available from `/openapi.json`, with interactive docs at `/docs` and `/redoc` when the API is running.
+
+## Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. It covers setup, coding style, branching, commit messages, and issue reporting expectations.
+
+
+

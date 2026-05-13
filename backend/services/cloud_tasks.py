@@ -4,7 +4,10 @@ import time
 from typing import Optional
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
-from config import settings
+try:
+    from backend.config import settings
+except ModuleNotFoundError:
+    from config import settings
 
 logger = logging.getLogger("CloudTasksService")
 

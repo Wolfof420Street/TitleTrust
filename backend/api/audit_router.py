@@ -8,6 +8,7 @@ try:
     from backend.models import GeoCheck, LiveTokenRequest
     from backend.schemas.audit import RetryAuditResponse, SessionStatusResponse, StartAuditResponse
     from backend.schemas.jobs import JobAcceptedResponse, JobStatusResponse
+    from backend.schemas.upload import StartAuditFromStorageRequest
     from backend.services.audit_service import audit_service
     from backend.services.background_job_service import background_job_service
     from backend.services.session_service import session_service
@@ -18,6 +19,7 @@ except ModuleNotFoundError:
     from models import GeoCheck, LiveTokenRequest
     from schemas.audit import RetryAuditResponse, SessionStatusResponse, StartAuditResponse
     from schemas.jobs import JobAcceptedResponse, JobStatusResponse
+    from schemas.upload import StartAuditFromStorageRequest
     from services.audit_service import audit_service
     from services.background_job_service import background_job_service
     from services.session_service import session_service
@@ -88,12 +90,32 @@ async def start_audit(
     )
 
 
+@router.post("/start/from-storage", response_model=StartAuditResponse)
+async def start_audit_from_storage(
+    payload: StartAuditFromStorageRequest,
+    background_tasks: BackgroundTasks,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: Dict[str, Any] = Depends(require_permission(Permission.AUDIT_START)),
+):
+    return session_service.start_marathon_from_storage(
+        object_path=payload.object_path,
+        original_filename=payload.original_filename,
+        user_id=user.get("uid", "unknown"),
+        organization_id=user.get("claims", {}).get("org_id") or user.get("org_id") or "personal",
+        background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.post("/tick")
-async def marathon_tick(payload: Dict[str, str]):
+async def marathon_tick(
+    payload: Dict[str, str],
+    user: Dict[str, Any] = Depends(require_permission(Permission.AUDIT_START)),
+):
     session_id = payload.get("session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="Missing session_id")
-    return session_service.tick(session_id)
+    return session_service.tick(session_id, user.get("uid", "unknown"))
 
 
 @router.get("/status/{session_id}", response_model=SessionStatusResponse)

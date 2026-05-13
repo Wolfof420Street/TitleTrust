@@ -25,7 +25,7 @@ class SessionRepository:
         self._idempotency = db.collection(settings.IDEMPOTENCY_COLLECTION)
 
     def create(self, session_id: str, user_id: str, payload: Dict[str, Any], organization_id: str) -> None:
-        self._collection.document(session_id).set(
+        self._collection.document(session_id).create(
             {
                 **payload,
                 "user_id": user_id,

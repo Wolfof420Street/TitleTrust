@@ -66,7 +66,7 @@ class PolicyService:
                 continue
 
             conditions = statement.get("conditions", {})
-            if conditions.get("owner_only") and resource and resource.get("user_id") != user_id:
+            if conditions.get("owner_only") and (not resource or resource.get("user_id") != user_id):
                 continue
             if "required_attributes" in conditions:
                 required = conditions["required_attributes"]

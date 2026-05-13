@@ -1,7 +1,15 @@
+import hashlib
+
 from fastapi import HTTPException, Request, status
 
-from config import get_settings
-from infrastructure.rate_limit_store import build_store
+try:
+    from backend.config import get_settings
+except ImportError:  # pragma: no cover - fallback for local module execution
+    from config import get_settings
+try:
+    from backend.infrastructure.rate_limit_store import build_store
+except ImportError:  # pragma: no cover - fallback for local module execution
+    from infrastructure.rate_limit_store import build_store
 
 settings = get_settings()
 store = build_store(getattr(settings, "REDIS_URL", None))
@@ -10,8 +18,11 @@ store = build_store(getattr(settings, "REDIS_URL", None))
 def _request_key(request: Request) -> str:
     xff = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     ip = xff or (request.client.host if request.client else "unknown")
-    uid = request.headers.get("x-user-id", "anonymous")
-    return f"rl:{request.url.path}:{ip}:{uid}"
+    auth_header = request.headers.get("authorization", "")
+    device_session_id = request.headers.get("x-device-session-id", "")
+    principal = auth_header or device_session_id or "anonymous"
+    principal_fingerprint = hashlib.sha256(principal.encode("utf-8")).hexdigest()[:16]
+    return f"rl:{request.url.path}:{ip}:{principal_fingerprint}"
 
 
 async def enforce_rate_limit(request: Request) -> None:

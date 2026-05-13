@@ -10,6 +10,7 @@ class DeviceSessionUpsertRequest(BaseModel):
     device_id: str
     platform: str
     app_version: str
+    request_secret: str
 
 
 class DeviceSessionResponse(BaseModel):

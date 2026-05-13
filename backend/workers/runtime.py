@@ -55,6 +55,8 @@ logger = logging.getLogger("TitleTrust-WorkerRuntime")
 # Register metrics safely - they may already exist in the default registry
 JOB_COUNTER = None
 WORKER_HEARTBEAT = None
+QUEUE_DEPTH_GAUGE = None
+ACTIVE_JOBS_GAUGE = None
 
 if Counter is not None and REGISTRY is not None:
     try:
@@ -96,6 +98,42 @@ if Counter is not None and REGISTRY is not None:
             )
         except Exception:
             # Metric already registered
+            pass
+
+    try:
+        QUEUE_DEPTH_GAUGE = REGISTRY._names_to_collectors.get("titletrust_worker_queue_depth")
+        if not QUEUE_DEPTH_GAUGE:
+            QUEUE_DEPTH_GAUGE = Gauge(
+                "titletrust_worker_queue_depth",
+                "Observed Redis queue depth",
+                ["queue_name"],
+            )
+    except (KeyError, AttributeError):
+        try:
+            QUEUE_DEPTH_GAUGE = Gauge(
+                "titletrust_worker_queue_depth",
+                "Observed Redis queue depth",
+                ["queue_name"],
+            )
+        except Exception:
+            pass
+
+    try:
+        ACTIVE_JOBS_GAUGE = REGISTRY._names_to_collectors.get("titletrust_worker_active_jobs")
+        if not ACTIVE_JOBS_GAUGE:
+            ACTIVE_JOBS_GAUGE = Gauge(
+                "titletrust_worker_active_jobs",
+                "Active jobs currently being processed",
+                ["worker_id"],
+            )
+    except (KeyError, AttributeError):
+        try:
+            ACTIVE_JOBS_GAUGE = Gauge(
+                "titletrust_worker_active_jobs",
+                "Active jobs currently being processed",
+                ["worker_id"],
+            )
+        except Exception:
             pass
 
 
@@ -236,6 +274,8 @@ class WorkerRuntime:
             return
 
         # Update job status to running
+        if ACTIVE_JOBS_GAUGE:
+            ACTIVE_JOBS_GAUGE.labels(self._worker_id).inc()
         self._jobs.update(
             job_id,
             {
@@ -297,6 +337,9 @@ class WorkerRuntime:
             self._handle_job_failure(
                 payload, attempts, str(exc), job_type, traceback.format_exc()
             )
+        finally:
+            if ACTIVE_JOBS_GAUGE:
+                ACTIVE_JOBS_GAUGE.labels(self._worker_id).dec()
 
     def _handle_job_failure(
         self,
@@ -456,6 +499,10 @@ class WorkerRuntime:
                 self._queue.set_heartbeat(self._worker_id)
                 if WORKER_HEARTBEAT:
                     WORKER_HEARTBEAT.labels(self._worker_id).set(time.time())
+                if QUEUE_DEPTH_GAUGE and self._queue.enabled:
+                    QUEUE_DEPTH_GAUGE.labels(settings.WORKER_QUEUE_NAME).set(
+                        self._queue.queue_depth(settings.WORKER_QUEUE_NAME)
+                    )
 
                 # Poll queue
                 envelope = self._queue.pop(settings.WORKER_QUEUE_NAME)
@@ -476,6 +523,8 @@ class WorkerRuntime:
         """Get worker status for monitoring."""
         return {
             "worker_id": self._worker_id,
+            "queue_enabled": self._queue.enabled,
+            "queue_depth": self._queue.queue_depth(settings.WORKER_QUEUE_NAME) if self._queue.enabled else 0,
             "circuit_breakers": {
                 name: cb.get_status()
                 for name, cb in self._circuit_breakers.items()
@@ -484,6 +533,12 @@ class WorkerRuntime:
                 "total_jobs": JOB_COUNTER.values() if JOB_COUNTER else {},
             },
         }
+
+    def healthcheck(self) -> bool:
+        """Validate worker runtime dependencies for liveness/readiness probes."""
+        if settings.QUEUE_MODE == "redis":
+            return self._queue.enabled and self._queue.ping()
+        return True
 
 
 worker_runtime = WorkerRuntime()

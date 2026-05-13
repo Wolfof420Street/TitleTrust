@@ -9,6 +9,7 @@ import json
 import hashlib
 import time
 import traceback
+import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, asdict
@@ -29,11 +30,17 @@ from tenacity import (
 
 # Local imports with proper error handling
 try:
-    from config import settings
-    from models import ForensicReport, VisualAnomaly, VerificationStep
+    from backend.config import settings
+    from backend.core.gemini_api_manager import gemini_api_manager
+    from backend.models import ForensicReport, VisualAnomaly, VerificationStep
 except ImportError as e:
-    logging.critical(f"Failed to import required modules: {e}")
-    raise SystemExit(f"Cannot start without required dependencies: {e}")
+    try:
+        from config import settings
+        from core.gemini_api_manager import gemini_api_manager
+        from models import ForensicReport, VisualAnomaly, VerificationStep
+    except ImportError:
+        logging.critical(f"Failed to import required modules: {e}")
+        raise SystemExit(f"Cannot start without required dependencies: {e}")
 
 
 # --- CONFIGURATION ---
@@ -340,6 +347,11 @@ Your goal is to detect fraudulent title deeds through a rigorous, multi-step inv
 4. **Synthesis**: Combine visual flaws with external factual inconsistencies to determine a Risk Score (0-100).
 </Investigation Protocol>
 
+<Chain of Verification>
+Use CoVe: extract each claim, verify it against at least one grounded source, and only synthesize from verified claims.
+If a claim is contradicted by evidence, keep the contradiction visible in the final reasoning instead of softening it.
+</Chain of Verification>
+
 <Output Format>
 Provide a structured ForensicReport with:
 - title_number: Extracted title number
@@ -425,6 +437,19 @@ Objective, skeptical, and legally precise. Focus on evidence-based conclusions.
             # Parse response
             if response.parsed:
                 result = response.parsed.model_dump()
+                result["trace_id"] = f"forensic-{uuid.uuid4().hex[:12]}"
+                result["evidence_sha256"] = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "file_uri": getattr(file_ref, "uri", file_path),
+                            "file_mime_type": getattr(file_ref, "mime_type", None),
+                            "response": result,
+                            "response_text": response.text if hasattr(response, "text") else None,
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
                 logger.info(
                     f"Investigation complete: {file_hash} - "
                     f"Verdict: {result.get('final_verdict', 'UNKNOWN')} - "
@@ -524,6 +549,7 @@ class KenyanLandForensicsAgent:
             self.client = genai.Client(api_key=key)
             self.file_handler = FileHandler()
             self.engine = InvestigationEngine(self.client)
+            self.gemini_manager = gemini_api_manager
             self.metrics_history: List[InvestigationMetrics] = []
             
             logger.info("Forensics Agent initialized successfully")
@@ -559,12 +585,11 @@ class KenyanLandForensicsAgent:
         try:
             # Step 1: Validate file
             validated_path = self.file_handler.validate_file(file_path)
-            
-            # Step 2: Upload file
-            file_ref = self.file_handler.upload_file(self.client, validated_path)
-            
-            # Step 3: Investigate
-            result = self.engine.investigate(file_ref, file_path)
+
+            result = self.gemini_manager.execute_forensic_analysis(
+                str(validated_path),
+                lambda: self._run_live_investigation(validated_path, file_path),
+            )
             
             # Update metrics
             metrics.success = True
@@ -626,6 +651,10 @@ class KenyanLandForensicsAgent:
         
         # In production, send to monitoring system (Prometheus, CloudWatch, etc.)
         # self._send_to_monitoring(metrics)
+
+    def _run_live_investigation(self, validated_path: Path, file_path: str) -> Dict[str, Any]:
+        file_ref = self.file_handler.upload_file(self.client, validated_path)
+        return self.engine.investigate(file_ref, file_path)
     
     def get_metrics_summary(self) -> Dict[str, Any]:
         """

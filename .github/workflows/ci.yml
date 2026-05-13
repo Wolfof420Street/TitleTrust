@@ -31,6 +31,11 @@ jobs:
         run: |
           pip install cyclonedx-bom
           cyclonedx-py environment -o backend-sbom.json
+      - name: Upload backend SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sbom
+          path: backend-sbom.json
 
   flutter-quality:
     runs-on: ubuntu-latest

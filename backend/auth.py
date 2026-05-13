@@ -3,7 +3,10 @@ from firebase_admin import auth
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.firebase import initialize_firebase
+try:
+    from backend.services.firebase import initialize_firebase
+except ModuleNotFoundError:
+    from services.firebase import initialize_firebase
 
 # Ensure Firebase is initialized
 initialize_firebase()

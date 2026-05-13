@@ -20,7 +20,7 @@ jobs:
 
       # Python setup
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -30,22 +30,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install bandit[toml] pip-audit trivy
+          pip install bandit[toml] bandit-sarif-formatter pip-audit
 
       # SAST - Bandit (Python security)
       - name: Run Bandit SAST scan
         run: |
           bandit -r backend/ \
-            -f json -o bandit-report.json \
+            -f sarif -o bandit-report.sarif \
             --severity-level medium \
             --exclude ./backend/tests
         continue-on-error: true
 
       - name: Upload Bandit results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: bandit-report.json
+          sarif_file: bandit-report.sarif
           category: bandit
 
       # Dependency audit
@@ -71,7 +71,7 @@ jobs:
         with:
           name: security-reports
           path: |
-            bandit-report.json
+            bandit-report.sarif
             pip-audit-report.txt
 
   dependency-check:
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           scan-type: 'fs'
           scan-ref: 'backend/requirements.txt'
@@ -93,7 +93,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-results.sarif
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -117,16 +117,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install cyclonedx-bom syft
+          pip install cyclonedx-bom
 
       # Generate SBOM using CycloneDX
       - name: Generate CycloneDX SBOM
         run: |
-          pip install cyclonedx-python-lib
-          python -m cyclonedx_python \
-            -o xml \
-            -of sbom-cyclonedx.xml \
-            -a requirements.txt
+          cyclonedx-py requirements --output-format xml --output-file sbom-cyclonedx.xml backend/requirements.txt
 
       # Generate SBOM using Syft
       - name: Generate Syft SBOM
@@ -164,7 +160,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -189,7 +185,7 @@ jobs:
 
       # Upload coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           flags: security
@@ -211,15 +207,16 @@ jobs:
           docker build -f backend/Dockerfile -t titletrust:security-scan .
 
       - name: Scan container with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          input: 'titletrust:security-scan'
+          scan-type: 'image'
+          image-ref: 'titletrust:security-scan'
           format: 'sarif'
           output: 'trivy-container-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload container scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-container-results.sarif

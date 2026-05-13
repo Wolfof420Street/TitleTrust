@@ -32,6 +32,11 @@ DEFAULT_POLICY = {
     ],
 }
 
+DENY_ALL_POLICY = {
+    "version": 1,
+    "statements": [],
+}
+
 
 class PolicyRepository:
     def __init__(self, db: firestore.Client) -> None:
@@ -41,9 +46,8 @@ class PolicyRepository:
     def get_policy(self, organization_id: str) -> Dict[str, Any]:
         doc = self._policies.document(organization_id).get()
         if not doc.exists:
-            self._policies.document(organization_id).set(DEFAULT_POLICY)
-            return DEFAULT_POLICY
-        return doc.to_dict() or DEFAULT_POLICY
+            return DENY_ALL_POLICY
+        return doc.to_dict() or DENY_ALL_POLICY
 
     def get_membership(self, organization_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         document_id = f"{organization_id}:{user_id}"

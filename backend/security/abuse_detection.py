@@ -7,10 +7,12 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from datetime import timedelta
 from threading import Lock
 from typing import Deque, Dict, List, Optional
 
-from backend.security.anomaly_detection import AnomalyDetectionEngine, SessionRiskLevel
+from backend.domain.session_models import SessionRiskLevel
+from backend.security.anomaly_detection import AnomalyDetectionEngine
 
 from .request_fingerprinting import RequestFingerprint, RequestFingerprinting
 from .threat_intelligence import ThreatIndicator, ThreatIntelligenceStore, ThreatSeverity
@@ -160,7 +162,7 @@ class AbuseDetectionEngine:
 
     def quarantine_fingerprint(self, fingerprint_id: str, minutes: int = 15) -> None:
         with self._lock:
-            self._quarantines[fingerprint_id] = datetime.now(timezone.utc)
+            self._quarantines[fingerprint_id] = datetime.now(timezone.utc) + timedelta(minutes=minutes)
 
     def record_threat_indicator(self, assessment: AbuseAssessment, tenant_id: str, device_id: str) -> None:
         if assessment.fingerprint is None:
@@ -181,10 +183,12 @@ class AbuseDetectionEngine:
 
     def summarize(self, tenant_id: Optional[str] = None) -> Dict[str, object]:
         signals = self._intel.list_signals(tenant_id=tenant_id)
+        with self._lock:
+            quarantined = sum(1 for fingerprint_id in list(self._quarantines) if self._is_quarantined_locked(fingerprint_id))
         return {
             "tenant_id": tenant_id,
             "signals": len(signals),
-            "quarantined_fingerprints": len(self._quarantines),
+            "quarantined_fingerprints": quarantined,
             "recent_observations": sum(len(obs) for obs in self._history.values()),
         }
 
@@ -249,7 +253,16 @@ class AbuseDetectionEngine:
 
     def _is_quarantined(self, fingerprint_id: str) -> bool:
         with self._lock:
-            return fingerprint_id in self._quarantines
+            return self._is_quarantined_locked(fingerprint_id)
+
+    def _is_quarantined_locked(self, fingerprint_id: str) -> bool:
+        expiry = self._quarantines.get(fingerprint_id)
+        if not expiry:
+            return False
+        if expiry <= datetime.now(timezone.utc):
+            self._quarantines.pop(fingerprint_id, None)
+            return False
+        return True
 
     def _is_velocity_anomalous(self, fingerprint_id: str, ip_address: str) -> bool:
         observations = list(self._get_recent_observations(fingerprint_id))

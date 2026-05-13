@@ -15,9 +15,17 @@ class Settings(BaseSettings):
     MAPS_API_KEY: Optional[str] = Field(default=None)
     VERTEX_AI_LOCATION: str = Field(default="us-central1")
     GEMINI_API_KEY: Optional[str] = Field(default=None)
+    GEMINI_MAX_CONCURRENT_REQUESTS: int = Field(default=2)
+    GEMINI_RATE_LIMIT_CALLS: int = Field(default=10)
+    GEMINI_RATE_LIMIT_PERIOD_SECONDS: int = Field(default=60)
+    GEMINI_CACHE_TTL_SECONDS: int = Field(default=3600)
+    GEMINI_CACHE_ENABLED: bool = Field(default=True)
 
     FIREBASE_CREDENTIALS_PATH: Optional[str] = Field(default=None, alias="FIREBASE_CREDENTIALS_PATH")
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = Field(default=None)
+    UPLOAD_BUCKET_NAME: Optional[str] = Field(default=None)
+    STORAGE_UPLOAD_PREFIX: str = Field(default="uploads")
+    SIGNED_UPLOAD_URL_TTL_SECONDS: int = Field(default=900)
 
     MODEL_NAME: str = Field(default="gemini-3-flash-preview")
     FORENSIC_MODEL_NAME: str = Field(default="gemini-3-pro-preview")

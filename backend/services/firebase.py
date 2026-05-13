@@ -2,7 +2,11 @@ import os
 import logging
 import firebase_admin
 from firebase_admin import firestore, credentials, initialize_app, get_app
-from config import get_settings
+
+try:
+    from backend.config import get_settings
+except ModuleNotFoundError:
+    from config import get_settings
 
 logger = logging.getLogger("TitleTrust-Firebase")
 settings = get_settings()

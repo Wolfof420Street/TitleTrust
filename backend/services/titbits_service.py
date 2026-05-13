@@ -39,7 +39,7 @@ class TitbitsService:
                 config=types.GenerateContentConfig(
                     temperature=0.4,
                     response_mime_type="application/json",
-                    response_schema={"type": "ARRAY", "items": {"type": "STRING"}},
+                    response_json_schema={"type": "array", "items": {"type": "string"}},
                 ),
             )
             if response.text:

@@ -12,9 +12,14 @@ Implements:
 
 import logging
 import secrets
-from typing import Dict, Any
+from typing import Any, Dict
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+
+try:
+    from backend.config import settings
+except ModuleNotFoundError:
+    from config import settings
 
 logger = logging.getLogger("TitleTrust-SecurityHeaders")
 
@@ -46,7 +51,7 @@ class AdvancedSecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.is_production = False  # Set based on environment
+        self.is_production = settings.is_production
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Generate per-request nonce for inline scripts/styles
@@ -82,7 +87,7 @@ class AdvancedSecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Only same-origin forms
             "form-action 'self'",
             # Restrict frame origins to self
-            "frame-ancestors 'self'",
+            "frame-ancestors 'none'",
             # No plugins
             "object-src 'none'",
             # Restrict base URL
@@ -95,7 +100,7 @@ class AdvancedSecurityHeadersMiddleware(BaseHTTPMiddleware):
             "frame-src 'self'",
             # Only allow secure connections for nested browsing contexts
             "child-src 'self'",
-            # Reporting endpoint (implement if needed)
+            # Reporting endpoint for violation monitoring
             "report-uri /api/security/csp-report",
         ]
 

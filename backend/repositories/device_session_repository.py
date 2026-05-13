@@ -28,10 +28,21 @@ class DeviceSessionRepository:
             {
                 "revoked": True,
                 "user_id": user_id,
+                "request_secret_ciphertext": firestore.DELETE_FIELD,
+                "request_secret_fingerprint": firestore.DELETE_FIELD,
+                "previous_request_secret_ciphertext": firestore.DELETE_FIELD,
+                "previous_request_secret_fingerprint": firestore.DELETE_FIELD,
+                "request_secret_revoked_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
             merge=True,
         )
+
+    def get(self, session_id: str) -> Dict[str, Any] | None:
+        doc = self._sessions.document(session_id).get()
+        if not doc.exists:
+            return None
+        return doc.to_dict()
 
     def list_for_user(self, user_id: str) -> List[Dict[str, Any]]:
         docs = self._sessions.where("user_id", "==", user_id).stream()

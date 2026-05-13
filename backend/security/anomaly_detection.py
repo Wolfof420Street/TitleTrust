@@ -120,7 +120,12 @@ class AnomalyDetectionEngine:
             risk_delta += self.IP_CHANGE_SCORE
 
             # Check for impossible travel
-            if self._is_impossible_travel(session.current_ip, ip_address):
+            if self._is_impossible_travel(
+                session.current_ip,
+                ip_address,
+                session.last_activity_at,
+                datetime.now(),
+            ):
                 anomalies.append(SecurityEventType.IMPOSSIBLE_TRAVEL)
                 risk_delta += self.IMPOSSIBLE_TRAVEL_SCORE
                 logger.error(
@@ -156,8 +161,16 @@ class AnomalyDetectionEngine:
 
         return new_risk_score, new_risk_level, anomalies
 
-    def _is_impossible_travel(self, old_ip: str, new_ip: str) -> bool:
+    def _is_impossible_travel(
+        self,
+        old_ip: str,
+        new_ip: str,
+        old_ts: Optional[datetime],
+        new_ts: Optional[datetime],
+    ) -> bool:
         """Detect impossible travel between two IPs."""
+        if not old_ts or not new_ts:
+            return False
         old_location = GeoLocation.get_location_for_ip(old_ip)
         new_location = GeoLocation.get_location_for_ip(new_ip)
 
@@ -172,13 +185,11 @@ class AnomalyDetectionEngine:
             new_location["lng"],
         )
 
-        # If distance > 2000 km in less than 1 hour, likely impossible
-        # (assuming human travel speed max is ~1000 km/hour for planes)
-        max_possible_distance = 1000.0  # km/hour
-        if distance_km > max_possible_distance:
-            return True
-
-        return False
+        hours_elapsed = (new_ts - old_ts).total_seconds() / 3600
+        if hours_elapsed <= 0:
+            return False
+        max_speed_kmh = 1000.0
+        return (distance_km / hours_elapsed) > max_speed_kmh
 
     def _score_to_level(self, score: float) -> SessionRiskLevel:
         """Convert risk score to risk level."""
@@ -208,6 +219,8 @@ class AnomalyDetectionEngine:
         Returns:
             True if replay detected
         """
+        if not self.db:
+            return False
         # Check recent token usage in audit logs
         try:
             recent_uses = (
@@ -250,12 +263,13 @@ class AnomalyDetectionEngine:
         Returns:
             True if brute force detected
         """
+        if not self.db:
+            return False
         try:
             failed_attempts = (
                 self.db.collection(self.security_events_collection)
                 .where("user_id", "==", user_id)
-                .where("event_type", "==", SecurityEventType.SESSION_CREATED.value)
-                .where("severity", "==", "error")
+                .where("event_type", "==", SecurityEventType.BRUTE_FORCE_ATTEMPT.value)
                 .where(
                     "timestamp",
                     ">",
@@ -280,6 +294,8 @@ class AnomalyDetectionEngine:
 
     def get_risk_summary(self, user_id: str) -> Dict[str, Any]:
         """Get risk summary for user across all sessions."""
+        if not self.db:
+            return {}
         try:
             sessions = (
                 self.db.collection(self.sessions_collection)

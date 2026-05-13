@@ -16,7 +16,10 @@ class JobRepository:
         self._dead_letters = db.collection(settings.DEAD_LETTER_COLLECTION)
 
     def create(self, job_id: str, payload: Dict[str, Any]) -> None:
-        self._jobs.document(job_id).set(
+        document = self._jobs.document(job_id)
+        if document.get().exists:
+            raise ValueError(f"Job {job_id} already exists")
+        document.set(
             {
                 **payload,
                 "created_at": firestore.SERVER_TIMESTAMP,

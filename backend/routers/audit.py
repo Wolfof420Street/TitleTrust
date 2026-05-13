@@ -393,7 +393,7 @@ async def get_audit_status(
             "status": data.get("status"),
             "progress": data.get("progress_checklist", {}),
             "total_steps": data.get("total_steps", 0),
-            "last_thought": data.get("last_thought"),
+            "last_thought": data.get("latest_thought") or data.get("last_thought"),
             "error": data.get("error"),
             "findings": data.get("findings", []),
             "audit_conclusion": data.get("audit_conclusion")

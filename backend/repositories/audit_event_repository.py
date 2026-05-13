@@ -25,34 +25,41 @@ class AuditEventRepository:
         payload: Dict[str, Any],
         actor_id: Optional[str] = None,
     ) -> str:
-        events = (
-            self._collection
-            .where("session_id", "==", session_id)
-            .order_by("sequence", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .stream()
-        )
-        previous = next(events, None)
-        previous_hash = previous.to_dict().get("event_hash", "") if previous else ""
-        sequence = (previous.to_dict().get("sequence", 0) + 1) if previous else 1
+        transaction = self._db.transaction()
 
-        canonical_payload = json.dumps(payload, sort_keys=True, default=str)
-        event_hash = hashlib.sha256(
-            f"{session_id}:{sequence}:{event_type}:{actor_id or ''}:{previous_hash}:{canonical_payload}".encode("utf-8")
-        ).hexdigest()
+        @firestore.transactional
+        def _append_in_transaction(txn):
+            events = (
+                self._collection
+                .where("session_id", "==", session_id)
+                .order_by("sequence", direction=firestore.Query.DESCENDING)
+                .limit(1)
+                .stream(transaction=txn)
+            )
+            previous = next(events, None)
+            previous_hash = previous.to_dict().get("event_hash", "") if previous else ""
+            sequence = (previous.to_dict().get("sequence", 0) + 1) if previous else 1
 
-        document_id = f"{session_id}-{sequence:06d}"
-        self._collection.document(document_id).set(
-            {
-                "session_id": session_id,
-                "sequence": sequence,
-                "event_type": event_type,
-                "payload": payload,
-                "actor_id": actor_id,
-                "previous_hash": previous_hash,
-                "event_hash": event_hash,
-                "created_at": firestore.SERVER_TIMESTAMP,
-                "created_at_epoch": time.time(),
-            }
-        )
-        return event_hash
+            canonical_payload = json.dumps(payload, sort_keys=True, default=str)
+            event_hash = hashlib.sha256(
+                f"{session_id}:{sequence}:{event_type}:{actor_id or ''}:{previous_hash}:{canonical_payload}".encode("utf-8")
+            ).hexdigest()
+
+            document_id = f"{session_id}-{sequence:06d}"
+            txn.create(
+                self._collection.document(document_id),
+                {
+                    "session_id": session_id,
+                    "sequence": sequence,
+                    "event_type": event_type,
+                    "payload": payload,
+                    "actor_id": actor_id,
+                    "previous_hash": previous_hash,
+                    "event_hash": event_hash,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "created_at_epoch": time.time(),
+                },
+            )
+            return event_hash
+
+        return _append_in_transaction(transaction)

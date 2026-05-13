@@ -49,8 +49,8 @@ test-coverage:
 
 lint:
 	@echo "Running code quality checks..."
-	$(PYTHON) -m flake8 backend --max-line-length=100 --exclude=__pycache__ || true
-	$(PYTHON) -m black --check backend || true
+	$(PYTHON) -m flake8 backend --max-line-length=100 --exclude=__pycache__
+	$(PYTHON) -m black --check backend
 
 format:
 	$(PYTHON) -m black backend

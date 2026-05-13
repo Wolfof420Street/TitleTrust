@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 from typing import Callable, Optional
@@ -88,7 +90,11 @@ class AdaptiveProtectionMiddleware(BaseHTTPMiddleware):
 
         if assessment.action in {AbuseAction.CHALLENGE, AbuseAction.QUARANTINE} and self._challenge_hook:
             try:
-                self._challenge_hook(request, assessment.to_dict())
+                challenge_payload = assessment.to_dict()
+                if inspect.iscoroutinefunction(self._challenge_hook):
+                    await self._challenge_hook(request, challenge_payload)
+                else:
+                    await asyncio.to_thread(self._challenge_hook, request, assessment.to_dict())
             except Exception:
                 logger.exception("challenge hook failed")
 
