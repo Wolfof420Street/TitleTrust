@@ -19,6 +19,42 @@ class MarathonService {
     final response = await _executor.run(() => _dio.post('/audit/start', data: formData));
     return InvestigationStartResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
+
+  Future<InvestigationStartResponse> startInvestigationFromStorage({
+    required String objectPath,
+    required String originalFilename,
+  }) async {
+    final response = await _executor.run(
+      () => _dio.post(
+        '/audit/start/from-storage',
+        data: {
+          'object_path': objectPath,
+          'original_filename': originalFilename,
+        },
+      ),
+    );
+    return InvestigationStartResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<InvestigationTickResponse> tickSession(String sessionId) async {
+    final response = await _executor.run(
+      () => _dio.post(
+        '/audit/tick',
+        data: {'session_id': sessionId},
+      ),
+    );
+    return InvestigationTickResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<InvestigationSessionStatusResponse> getSessionStatus(String sessionId) async {
+    final response = await _executor.run(() => _dio.get('/audit/status/$sessionId'));
+    return InvestigationSessionStatusResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<InvestigationRetryResponse> retrySession(String sessionId) async {
+    final response = await _executor.run(() => _dio.post('/audit/retry/$sessionId'));
+    return InvestigationRetryResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
 }
 
 final marathonServiceProvider = Provider<MarathonService>((ref) {

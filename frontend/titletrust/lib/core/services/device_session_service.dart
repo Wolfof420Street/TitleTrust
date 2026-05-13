@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:titletrust/core/network/dio_client.dart';
+import 'package:titletrust/core/network/network_error.dart';
 import 'package:titletrust/core/network/network_executor.dart';
 import 'package:titletrust/core/services/secure_storage_service.dart';
 import 'package:titletrust/security/transport_security_service.dart';
@@ -73,27 +74,24 @@ class DeviceSessionService {
     final packageInfo = await PackageInfo.fromPlatform();
     final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
 
-    try {
-      // POST is signed with the currently persisted old secret
-      // The request carries the new secret we want the server to expect next time
-      await _executor.run(
-        () => _dio.post(
-          '/auth/device-sessions',
-          data: {
-            'session_id': sessionId,
-            'device_id': Platform.localHostname,
-            'platform': Platform.operatingSystem,
-            'app_version': appVersion,
-            'request_secret': newSecret,
+    await _executor.run(
+      () => _dio.post(
+        '/auth/device-sessions',
+        data: {
+          'session_id': sessionId,
+          'device_id': Platform.localHostname,
+          'platform': Platform.operatingSystem,
+          'app_version': appVersion,
+          'request_secret': newSecret,
+        },
+        options: Options(
+          extra: {
+            RequestSigningInterceptor.requestSecretOverrideKey: newSecret,
           },
         ),
-      );
-      // Only persist new secret after successful POST
-      await _storage.write(_frontendRequestSecretKey, newSecret);
-    } catch (e) {
-      // On failure, the old secret remains persisted and can be reused for retry
-      rethrow;
-    }
+      ),
+    );
+    await _storage.write(_frontendRequestSecretKey, newSecret);
   }
 
   String _generateRandomSecret() {
@@ -111,15 +109,26 @@ class DeviceSessionService {
     if (sessionId == null || sessionId.isEmpty) {
       return;
     }
-    try {
-      await _executor.run(() => _dio.post('/auth/device-sessions/$sessionId/revoke'));
-    } catch (e) {
-      // Swallow network errors for best-effort local cleanup
-    } finally {
-      await _storage.delete(_deviceSessionIdKey);
-      // Also delete the request secret so the client cannot reuse the signing key
-      await _storage.delete(_frontendRequestSecretKey);
+    await _executor.run(() => _dio.post('/auth/device-sessions/$sessionId/revoke'));
+    await _storage.delete(_deviceSessionIdKey);
+    // Also delete the request secret so the client cannot reuse the signing key
+    await _storage.delete(_frontendRequestSecretKey);
+  }
+
+  Future<List<Map<String, dynamic>>> listActiveSessions() async {
+    final response = await _executor.run(() => _dio.get('/auth/device-sessions'));
+    final data = response.data;
+    if (data is Map && data['sessions'] is List) {
+      return (data['sessions'] as List)
+          .map((entry) {
+            if (entry is Map) {
+              return Map<String, dynamic>.from(entry);
+            }
+            throw const FormatException('Invalid device session entry');
+          })
+          .toList(growable: false);
     }
+    throw const NetworkError('Unexpected device session list response.');
   }
 
   String _generateUuidV4() {

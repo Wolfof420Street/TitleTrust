@@ -33,12 +33,67 @@ class NetworkExecutor {
 
   String _messageFrom(DioException error) {
     final responseDetail = error.response?.data;
-    if (responseDetail is Map && responseDetail["detail"] is String) {
-      return responseDetail["detail"] as String;
+    final parsedResponseMessage = _extractResponseMessage(responseDetail);
+    if (parsedResponseMessage != null && parsedResponseMessage.isNotEmpty) {
+      return parsedResponseMessage;
     }
     if (error.type == DioExceptionType.connectionTimeout) {
       return "Connection timed out. Please try again.";
     }
     return error.message ?? "Unexpected network error.";
+  }
+
+  String? _extractResponseMessage(dynamic responseDetail) {
+    if (responseDetail is Map) {
+      final detail = responseDetail["detail"];
+      if (detail is String) {
+        return detail;
+      }
+      if (detail is List) {
+        final messages = detail
+            .map((entry) => _formatValidationError(entry))
+            .whereType<String>()
+            .where((message) => message.isNotEmpty)
+            .toList(growable: false);
+        if (messages.isNotEmpty) {
+          return messages.join('; ');
+        }
+      }
+      final message = responseDetail["message"];
+      if (message is String && message.isNotEmpty) {
+        return message;
+      }
+    }
+    if (responseDetail is List) {
+      final messages = responseDetail
+          .map((entry) => _formatValidationError(entry))
+          .whereType<String>()
+          .where((message) => message.isNotEmpty)
+          .toList(growable: false);
+      if (messages.isNotEmpty) {
+        return messages.join('; ');
+      }
+    }
+    return null;
+  }
+
+  String? _formatValidationError(dynamic entry) {
+    if (entry is Map) {
+      final location = entry['loc'];
+      final message = entry['msg'];
+      final locationText = location is Iterable
+          ? location.map((segment) => segment.toString()).join('.')
+          : '';
+      if (message is String && message.isNotEmpty) {
+        if (locationText.isNotEmpty) {
+          return '$locationText: $message';
+        }
+        return message;
+      }
+    }
+    if (entry == null) {
+      return null;
+    }
+    return entry.toString();
   }
 }

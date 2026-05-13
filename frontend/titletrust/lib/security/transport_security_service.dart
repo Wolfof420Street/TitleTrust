@@ -66,6 +66,8 @@ class TransportSecurityService {
 }
 
 class RequestSigningInterceptor extends Interceptor {
+  static const String requestSecretOverrideKey = 'requestSecretOverride';
+
   final Future<String> Function() requestSecretProvider;
   final Future<String?> Function()? deviceSessionIdProvider;
 
@@ -76,7 +78,10 @@ class RequestSigningInterceptor extends Interceptor {
 
   @override
   Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final secret = await requestSecretProvider();
+    final overrideSecret = options.extra[requestSecretOverrideKey];
+    final secret = overrideSecret is String && overrideSecret.isNotEmpty
+        ? overrideSecret
+        : await requestSecretProvider();
     final signedHeaders = buildSignedHeaders(
       secret: secret,
       method: options.method,

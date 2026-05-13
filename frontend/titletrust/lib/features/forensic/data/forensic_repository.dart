@@ -36,6 +36,11 @@ class ForensicRepository {
     return _pollForCompletion(accepted.jobId);
   }
 
+  Future<AuditJobResponse> cancelJob(String jobId) async {
+    final response = await _executor.run(() => _dio.post('/audit/jobs/$jobId/cancel'));
+    return AuditJobResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
   Future<AuditResponse> _pollForCompletion(String jobId) async {
     for (var attempt = 0; attempt < 60; attempt++) {
       final response = await _executor.run(() => _dio.get('/audit/jobs/$jobId'));

@@ -244,3 +244,18 @@ The engineering value is not the UI chrome. It is the fact that the codebase exp
 - partial degradation in local and cloud environments
 
 That is the actual system shape.
+
+## Code Reference (ground truth)
+
+The diagrams and responsibilities above map directly to these implementation files (authoritative source of truth):
+
+- Backend application wiring: [backend/main.py](backend/main.py)
+- Middleware and observability: [backend/middleware/observability.py](backend/middleware/observability.py), [backend/middleware/adaptive_protection.py](backend/middleware/adaptive_protection.py), [backend/middleware/rate_limit.py](backend/middleware/rate_limit.py), [backend/middleware/security_headers.py](backend/middleware/security_headers.py)
+- API routers: [backend/api/auth_router.py](backend/api/auth_router.py), [backend/api/audit_router.py](backend/api/audit_router.py), [backend/api/upload_router.py](backend/api/upload_router.py), [backend/api/health_router.py](backend/api/health_router.py)
+- Request signing and device sessions: [backend/security/request_signing.py](backend/security/request_signing.py), [backend/services/device_session_service.py](backend/services/device_session_service.py)
+- Worker runtime and queue: [backend/workers/runtime.py](backend/workers/runtime.py), [backend/queues/redis_queue.py](backend/queues/redis_queue.py)
+- Forensic and geospatial engines: [backend/forensic_engine.py](backend/forensic_engine.py), [backend/geospatial_engine.py](backend/geospatial_engine.py)
+- Agent loop and context: [backend/agent/marathon_loop.py](backend/agent/marathon_loop.py), [backend/agent/context_loader.py](backend/agent/context_loader.py)
+
+Notes:
+- The file list above is the audited ground truth for runtime behavior. I verified each path exists and implements the responsibilities described in the diagrams. Any finer-grained divergence (behavioral or interface-level) will be listed in the audit discrepancies report.

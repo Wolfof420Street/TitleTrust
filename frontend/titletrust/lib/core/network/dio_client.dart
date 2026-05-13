@@ -22,7 +22,6 @@ Dio dio(Ref ref) {
       sendTimeout: const Duration(seconds: 60),
       headers: const {'Content-Type': 'application/json'},
       responseType: ResponseType.json,
-      validateStatus: (status) => status != null && status >= 200 && status < 500,
     ),
   );
 

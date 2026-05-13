@@ -33,6 +33,11 @@ class GeospatialRepository {
     return _pollForCompletion(accepted.jobId);
   }
 
+  Future<GeoCheckJobResponse> cancelJob(String jobId) async {
+    final response = await _executor.run(() => _dio.post('/audit/jobs/$jobId/cancel'));
+    return GeoCheckJobResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
   Future<GeoCheck> _pollForCompletion(String jobId) async {
     for (var attempt = 0; attempt < 60; attempt++) {
       final response = await _executor.run(() => _dio.get('/audit/jobs/$jobId'));

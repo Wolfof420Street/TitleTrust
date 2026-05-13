@@ -52,16 +52,18 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 ## API Endpoints
 
-### Forensic Audit
-`POST /audit/forensic`
-- Upload multiple documents (PDF, Images).
-- Returns analysis findings and status.
+The route surface has expanded beyond the original summary in this file.
 
-### Geospatial Audit
-`POST /audit/geospatial`
-- Inputs: `lat`, `lng`, `image` (site photo).
-- Returns verification result (`SAFE`, `RISK`, `UNCERTAIN`) and analysis details.
+- Full audited API contract: [documentation/API_REFERENCE.md](../documentation/API_REFERENCE.md)
+- Generated OpenAPI (runtime): `/openapi.json`
+- Interactive docs (runtime): `/docs`, `/redoc`
 
-### Health Check
-`GET /`
-- Returns status of the API.
+Quick route groups:
+
+- `GET /`, `GET /health/live`, `GET /health/ready`, `GET /metrics`
+- `POST /uploads/signed-url`
+- `GET /auth/device-sessions`, `POST /auth/device-sessions`, `POST /auth/device-sessions/{session_id}/revoke`
+- `POST /audit/forensic`, `POST /audit/geospatial`, `POST /audit/geospatial/live-token`
+- `POST /audit/start`, `POST /audit/start/from-storage`, `POST /audit/tick`
+- `GET /audit/status/{session_id}`, `POST /audit/retry/{session_id}`
+- `GET /audit/jobs/{job_id}`, `POST /audit/jobs/{job_id}/cancel`, `GET /audit/titbits`
