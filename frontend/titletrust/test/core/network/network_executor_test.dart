@@ -6,7 +6,7 @@ import 'package:titletrust/core/network/network_executor.dart';
 void main() {
   group('NetworkExecutor', () {
     test('surfaces standard FastAPI detail strings', () async {
-      final executor = NetworkExecutor();
+      const executor = NetworkExecutor();
       final requestOptions = RequestOptions(path: '/audit/tick');
 
       final future = executor.run(() async {
@@ -34,7 +34,7 @@ void main() {
     });
 
     test('surfaces FastAPI 422 validation arrays', () async {
-      final executor = NetworkExecutor();
+      const executor = NetworkExecutor();
       final requestOptions = RequestOptions(path: '/audit/start');
 
       final future = executor.run(() async {

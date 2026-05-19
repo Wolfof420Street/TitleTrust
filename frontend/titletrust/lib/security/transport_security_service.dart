@@ -136,7 +136,7 @@ class RequestSigningInterceptor extends Interceptor {
         final filename = file.value.filename ?? '';
         // Note: MultipartFile content should be included in hash for integrity.
         // This requires reading the file bytes; for now we use filename:length as placeholder.
-        // TODO: Implement streaming content hash for large files to avoid loading entire file in memory.
+        
         final fileLength = file.value.length;
         buffer.write('${file.key}:$filename:$fileLength|');
       }
@@ -144,7 +144,7 @@ class RequestSigningInterceptor extends Interceptor {
     }
     if (body is MultipartFile) {
       // Hash MultipartFile by filename + length (placeholder for content hash)
-      // TODO: Implement actual file content hashing using streaming digest for large files
+      
       final filename = body.filename ?? '';
       final length = body.length;
       return sha256.convert(utf8.encode('$filename:$length')).toString();
