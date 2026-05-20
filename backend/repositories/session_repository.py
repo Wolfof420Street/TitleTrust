@@ -46,7 +46,7 @@ class SessionRepository:
         )
 
     def register_idempotency_key(self, key: str, session_id: str, user_id: str) -> None:
-        self._idempotency.document(key).set(
+        self._idempotency.document(key).create(
             {
                 "session_id": session_id,
                 "user_id": user_id,

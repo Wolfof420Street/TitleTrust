@@ -939,11 +939,13 @@ class MarathonLoop:
                 and state.progress_checklist.get("physical_boundary_verified")
                 and state.progress_checklist.get("additional_records_checked")
                 and state.progress_checklist.get("historical_chain_checked")
+                and state.progress_checklist.get("zoning_checked")
                 and searches_done >= 1
                 and state.total_steps >= 4
             ) or (
                 searches_done >= 4
                 and state.progress_checklist.get("physical_boundary_verified")
+                and state.progress_checklist.get("zoning_checked")
             )
 
             if should_conclude:
@@ -1143,9 +1145,10 @@ class MarathonLoop:
                                 )
                             
                         # Truncate and store
-                        truncated_results = self.truncate_memory_item(search_results, max_chars=800)
+                        result_text = search_results.get("text", "")
+                        truncated_results = self.truncate_memory_item(result_text, max_chars=800)
                         state.memory.append(f"🔍 Search Results for '{decision.tool_input}':\n{truncated_results}")
-                        self.logger.info(f"Search completed: {len(search_results)} chars")
+                        self.logger.info(f"Search completed: {len(truncated_results)} chars")
 
                         # Record Action
                         state.add_action("google_search", decision.tool_input)

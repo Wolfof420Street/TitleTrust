@@ -13,6 +13,7 @@ from backend.logging_config import configure_logging
 from backend.middleware.adaptive_protection import AdaptiveProtectionMiddleware
 from backend.middleware.observability import CorrelationMiddleware
 from backend.middleware.rate_limit import enforce_rate_limit
+from backend.auth import get_current_user
 from backend.middleware.security_headers import AdvancedSecurityHeadersMiddleware
 from backend.security.abuse_detection import AbuseDetectionEngine
 from backend.security.anomaly_detection import AnomalyDetectionEngine
@@ -70,7 +71,7 @@ app.include_router(audit_router.router, dependencies=[Depends(enforce_rate_limit
 app.include_router(auth_router.router, dependencies=[Depends(enforce_rate_limit)])
 app.include_router(upload_router.router, dependencies=[Depends(enforce_rate_limit)])
 app.include_router(health_router.router)
-app.include_router(realtime_router)
+app.include_router(realtime_router, dependencies=[Depends(enforce_rate_limit), Depends(get_current_user)])
 
 initialize_telemetry(app=app, environment=settings.ENV)
 

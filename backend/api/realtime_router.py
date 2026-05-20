@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from starlette.responses import StreamingResponse
@@ -27,6 +28,7 @@ async def sse_endpoint(request: Request):
     async def event_generator():
         last_event_id = request.headers.get("Last-Event-ID") or request.headers.get("Last-Event-Id")
         q = await broadcaster.register(last_event_id=last_event_id)
+        event_counter = 0
         try:
             while True:
                 # If client disconnected, stop
@@ -34,12 +36,15 @@ async def sse_endpoint(request: Request):
                     break
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=15.0)
+                    event_counter += 1
+                    event_id = str(event_counter)
                     retry_hint = 3000
-                    yield f":retry: {retry_hint}\n"
+                    yield f"id: {event_id}\n"
+                    yield f"retry: {retry_hint}\n"
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     # send a heartbeat comment to keep connection alive
-                    yield "\n"
+                    yield ":\n"
                     continue
         finally:
             await broadcaster.unregister(q)

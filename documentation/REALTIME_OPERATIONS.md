@@ -82,5 +82,3 @@ Chaos scenarios to validate during SRE testing
 - Redis restart mid-stream (expect degraded fallback and no crash)
 - Worker crash during publish (expect replay on restart)
 - Network partition between instances and Redis (expect degraded mode and eventual healing)
-
-*** End File

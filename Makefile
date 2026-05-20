@@ -2,8 +2,8 @@ PYTHON ?= python3
 PIP ?= python3 -m pip
 VENV_DIR ?= venv
 
-.PHONY: help init install install-dev test compile check lint bootstrap clean
-.PHONY: backend-run backend-test backend-compile worker run-docker-compose
+.PHONY: help init install install-dev test compile lint bootstrap clean verify
+.PHONY: backend-run backend-test backend-compile worker test-verbose test-coverage format docker-up docker-down docker-logs redis-cli
 
 help:
 	@echo "TitleTrust Development Commands"

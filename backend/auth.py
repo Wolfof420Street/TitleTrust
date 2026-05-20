@@ -11,7 +11,7 @@ except ModuleNotFoundError:
 # Ensure Firebase is initialized
 initialize_firebase()
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 import logging
 
@@ -22,6 +22,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     Validates the Firebase ID Token in the Authorization header.
     Returns the decoded token (user dict) if valid.
     """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     token = credentials.credentials
     if not token:
         raise HTTPException(status_code=401, detail="Missing authentication token")

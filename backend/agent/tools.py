@@ -271,42 +271,46 @@ Official map context:
 Return a strict JSON result. If you see structures or boundary walls where the title context implies vacant land, set discrepancy_detected=true and severity=HIGH.
 """
 
-    response = client.models.generate_content(
-        model=settings.VISION_MODEL_NAME,
-        contents=[
-            types.Part.from_bytes(
-                data=base64.b64decode(satellite["data"]),
-                mime_type=str(satellite["mime_type"]),
+    try:
+        response = client.models.generate_content(
+            model=settings.VISION_MODEL_NAME,
+            contents=[
+                types.Part.from_bytes(
+                    data=base64.b64decode(satellite["data"]),
+                    mime_type=str(satellite["mime_type"]),
+                ),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=BoundaryInspectionResult,
+                temperature=0.1,
             ),
-            prompt,
-        ],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=BoundaryInspectionResult,
-            temperature=0.1,
-        ),
-    )
-    parsed = response.parsed.model_dump() if response.parsed else json.loads(response.text)
-    parsed["status"] = "success"
-    parsed["ground_truth"] = ground_truth
-    parsed["provider"] = "gemini_vision"
-    parsed["trace_id"] = f"vision-{uuid.uuid4().hex[:12]}"
-    parsed["evidence_sha256"] = hashlib.sha256(
-        json.dumps(
-            {
-                "lat": lat,
-                "lng": lng,
-                "title_context": title_context,
-                "expected_land_use": expected_land_use,
-                "ground_truth": ground_truth,
-                "satellite": satellite,
-                "response": parsed,
-            },
-            sort_keys=True,
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()
-    return parsed
+        )
+        parsed = response.parsed.model_dump() if response.parsed else json.loads(response.text)
+        parsed["status"] = "success"
+        parsed["ground_truth"] = ground_truth
+        parsed["provider"] = "gemini_vision"
+        parsed["trace_id"] = f"vision-{uuid.uuid4().hex[:12]}"
+        parsed["evidence_sha256"] = hashlib.sha256(
+            json.dumps(
+                {
+                    "lat": lat,
+                    "lng": lng,
+                    "title_context": title_context,
+                    "expected_land_use": expected_land_use,
+                    "ground_truth": ground_truth,
+                    "satellite": satellite,
+                    "response": parsed,
+                },
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        return parsed
+    except Exception as e:
+        logger.error(f"Boundary inspection failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
 
 
 def _utm_to_lat_lng(zone_number: int, hemisphere: str, easting: float, northing: float) -> tuple[float, float]:

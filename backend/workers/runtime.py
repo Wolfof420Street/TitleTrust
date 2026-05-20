@@ -549,6 +549,15 @@ class WorkerRuntime:
 
     def get_status(self) -> Dict[str, Any]:
         """Get worker status for monitoring."""
+        total_jobs = {}
+        if JOB_COUNTER:
+            try:
+                for metric_family in JOB_COUNTER.collect():
+                    for sample in metric_family.samples:
+                        total_jobs[f"{sample.name}_{sample.labels}"] = sample.value
+            except Exception:
+                total_jobs = {}
+        
         return {
             "worker_id": self._worker_id,
             "queue_enabled": self._queue.enabled,
@@ -558,7 +567,7 @@ class WorkerRuntime:
                 for name, cb in self._circuit_breakers.items()
             },
             "metrics": {
-                "total_jobs": JOB_COUNTER.values() if JOB_COUNTER else {},
+                "total_jobs": total_jobs,
             },
         }
 
