@@ -163,5 +163,7 @@ async def revoke_device_session(
         x_request_timestamp,
         x_correlation_id,
     )
+    if session_id != x_device_session_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session mismatch")
     device_session_service.revoke(session_id, user.get("uid", "unknown"))
     return {"status": "revoked"}

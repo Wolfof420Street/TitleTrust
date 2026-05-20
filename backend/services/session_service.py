@@ -170,9 +170,10 @@ class SessionService:
         existing = self._session_repository.resolve_idempotency_key(idempotency_key, user_id)
         if not existing:
             return None
+        existing_session = self._session_repository.get(existing) or {}
         return {
             "session_id": existing,
-            "status": "QUEUED",
+            "status": existing_session.get("status", AgentState.QUEUED.value),
             "message": "Existing investigation reused for idempotent request.",
         }
 
@@ -180,7 +181,8 @@ class SessionService:
         try:
             data = self._session_repository.get(session_id)
             if not data:
-                raise HTTPException(status_code=404, detail="Session not found")
+                logger.error("Bootstrap skipped: missing session", extra={"session_id": session_id, "user_id": user_id})
+                return
 
             agent = MarathonLoop(self._db, session_id)
             result = agent.run_single_step()

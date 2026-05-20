@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 KENYA_LAT_RANGE = (-5.5, 5.5)
 KENYA_LNG_RANGE = (33.0, 42.5)
+HTTP_TIMEOUT_SECONDS = 10
 
 # Lazy-load Google Maps Client to allow imports without API key
 _gmaps_client = None
@@ -143,7 +144,7 @@ def get_satellite_image(lat: float, lng: float, zoom: int = 18) -> Dict[str, Any
     }
     
     try:
-        response = requests.get(base_url, params=params)
+        response = requests.get(base_url, params=params, timeout=HTTP_TIMEOUT_SECONDS)
         response.raise_for_status()
         
         # Convert binary to base64 for Gemini
@@ -155,6 +156,12 @@ def get_satellite_image(lat: float, lng: float, zoom: int = 18) -> Dict[str, Any
             "data": image_b64,
             "metadata": f"Satellite view of {lat}, {lng} at zoom {zoom}"
         }
+    except requests.exceptions.Timeout as e:
+        logger.warning(f"Maps API timed out: {e}")
+        return {"status": "error", "error": "Maps API request timed out"}
+    except requests.exceptions.RequestException as e:
+        print(f"❌ [TOOL ERROR] Maps API failed: {e}")
+        return {"status": "error", "error": str(e)}
     except Exception as e:
         print(f"❌ [TOOL ERROR] Maps API failed: {e}")
         return {"status": "error", "error": str(e)}

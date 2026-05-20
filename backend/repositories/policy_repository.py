@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, List, Optional
 
 from firebase_admin import firestore
@@ -46,8 +47,8 @@ class PolicyRepository:
     def get_policy(self, organization_id: str) -> Dict[str, Any]:
         doc = self._policies.document(organization_id).get()
         if not doc.exists:
-            return DENY_ALL_POLICY
-        return doc.to_dict() or DENY_ALL_POLICY
+            return copy.deepcopy(DENY_ALL_POLICY)
+        return doc.to_dict() or copy.deepcopy(DENY_ALL_POLICY)
 
     def get_membership(self, organization_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         document_id = f"{organization_id}:{user_id}"

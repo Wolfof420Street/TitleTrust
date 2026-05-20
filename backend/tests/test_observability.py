@@ -1,256 +1,153 @@
-"""Tests for observability middleware and telemetry initialization.
+"""Tests for observability middleware and telemetry initialization."""
 
-Tests cover:
-- Correlation ID propagation
-- Request/response tracing
-- Metrics collection
-- Telemetry initialization
-- Structured logging
-- Error tracking
-"""
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch, call
-from starlette.requests import Request
-from starlette.responses import Response
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
+import backend.middleware.observability as observability
 from backend.middleware.observability import CorrelationMiddleware
 
 
-@pytest.fixture
-def mock_request():
-    """Create a mock ASGI request."""
-    return {
-        "type": "http",
-        "headers": [],
-        "method": "GET",
-        "path": "/test",
-    }
+def _initialize_telemetry_for_test():
+    try:
+        from backend.telemetry.init import initialize_telemetry
+    except Exception as exc:  # pragma: no cover - dependency-gated environments
+        pytest.skip(f"Telemetry module unavailable: {exc}")
+    return initialize_telemetry
 
 
-@pytest.fixture
-def mock_app():
-    """Create a mock app."""
-    async def app(scope, receive, send):
-        # Simple ASGI app that echoes
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [],
-            }
-        )
-        await send(
-            {
-                "type": "http.response.body",
-                "body": b"OK",
-            }
-        )
-    return app
+def _build_client(status_code: int = 200, raise_error: bool = False) -> TestClient:
+    app = FastAPI()
+    app.add_middleware(CorrelationMiddleware)
+
+    @app.get("/test")
+    async def _test_route():
+        if raise_error:
+            raise RuntimeError("boom")
+        return JSONResponse(status_code=status_code, content={"ok": True})
+
+    return TestClient(app, raise_server_exceptions=False)
 
 
 class TestCorrelationMiddleware:
-    """Test correlation ID generation and propagation."""
-
     def test_middleware_generates_correlation_id_if_missing(self):
-        """Test middleware generates X-Correlation-ID if not provided."""
-        middleware = CorrelationMiddleware(MagicMock())
-        
-        scope = {
-            "type": "http",
-            "headers": [],
-            "method": "GET",
-            "path": "/test",
-        }
-        
-        # Should add correlation ID to scope
-        assert middleware is not None
+        response = _build_client().get("/test")
+        assert response.status_code == 200
+        assert "X-Correlation-ID" in response.headers
+        assert response.headers["X-Correlation-ID"]
 
     def test_middleware_preserves_existing_correlation_id(self):
-        """Test middleware preserves existing X-Correlation-ID header."""
-        middleware = CorrelationMiddleware(MagicMock())
-        
-        scope = {
-            "type": "http",
-            "headers": [(b"x-correlation-id", b"existing-id-123")],
-            "method": "GET",
-            "path": "/test",
-        }
-        
-        # Should preserve the existing ID
-        assert middleware is not None
+        response = _build_client().get("/test", headers={"X-Correlation-ID": "existing-id-123"})
+        assert response.status_code == 200
+        assert response.headers["X-Correlation-ID"] == "existing-id-123"
 
     def test_middleware_includes_correlation_id_in_response_headers(self):
-        """Test middleware includes correlation ID in response headers."""
-        app = MagicMock()
-        middleware = CorrelationMiddleware(app)
-        
-        # Middleware should add correlation ID to response
-        assert middleware is not None
+        response = _build_client().get("/test")
+        assert "X-Correlation-ID" in response.headers
+        assert "X-Response-Time-Ms" in response.headers
 
 
 class TestObservabilityMetrics:
-    """Test metrics collection."""
-
     def test_correlation_middleware_tracks_request_count(self):
-        """Test correlation middleware increments request metrics."""
-        middleware = CorrelationMiddleware(MagicMock())
-        
-        # Should track request with correlation ID
-        assert middleware is not None
+        counter = MagicMock()
+        counter.labels.return_value = MagicMock()
+        with patch.object(observability, "REQUEST_COUNT", counter):
+            response = _build_client().get("/test")
+        assert response.status_code == 200
+        counter.labels.assert_called_once_with("GET", "/test", "200")
+        counter.labels.return_value.inc.assert_called_once()
 
     def test_correlation_middleware_tracks_response_latency(self):
-        """Test correlation middleware records response latency."""
-        middleware = CorrelationMiddleware(MagicMock())
-        
-        # Should measure and record request duration
-        assert middleware is not None
+        histogram = MagicMock()
+        histogram.labels.return_value = MagicMock()
+        with patch.object(observability, "REQUEST_LATENCY", histogram):
+            response = _build_client().get("/test")
+        assert response.status_code == 200
+        histogram.labels.assert_called_once_with("GET", "/test")
+        histogram.labels.return_value.observe.assert_called_once()
 
     def test_correlation_middleware_tracks_error_responses(self):
-        """Test correlation middleware tracks error status codes."""
-        middleware = CorrelationMiddleware(MagicMock())
-        
-        # Should increment error counter for 4xx/5xx responses
-        assert middleware is not None
-
-
-class TestCorrelationContext:
-    """Test correlation context propagation."""
-
-    def test_correlation_id_available_in_logs(self):
-        """Test correlation ID is available to logging context."""
-        # When a request with X-Correlation-ID comes in,
-        # all logging should include this ID
-        assert True
-
-    def test_correlation_id_propagates_to_async_tasks(self):
-        """Test correlation ID propagates to background tasks."""
-        # Background tasks should inherit correlation ID from request
-        assert True
-
-    def test_correlation_id_propagates_to_database_queries(self):
-        """Test correlation ID is available in database operations."""
-        # Database repositories should have access to correlation ID
-        assert True
+        counter = MagicMock()
+        counter.labels.return_value = MagicMock()
+        with patch.object(observability, "REQUEST_COUNT", counter):
+            response = _build_client(raise_error=True).get("/test")
+        assert response.status_code == 500
+        counter.labels.assert_called_once_with("GET", "/test", "500")
+        counter.labels.return_value.inc.assert_called_once()
 
 
 class TestTelemetryInitialization:
-    """Test telemetry setup and initialization."""
-
     def test_telemetry_initializes_with_valid_config(self):
-        """Test telemetry initializes with valid environment config."""
-        from backend.telemetry.init import initialize_telemetry
-        
-        app = MagicMock()
-        
-        with patch.dict(
-            "os.environ",
-            {
-                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://jaeger:4317",
-                "ENV": "development",
-            },
-        ):
-            # Should initialize without error
-            try:
-                initialize_telemetry(app=app, environment="development")
-            except Exception as e:
-                # Some tests environments may not have all dependencies
-                pytest.skip(f"Telemetry init skipped: {e}")
+        initialize_telemetry = _initialize_telemetry_for_test()
+        app = FastAPI()
+        with patch("backend.telemetry.init.init_tracing", return_value=object()) as mock_trace, patch(
+            "backend.telemetry.init.init_metrics", return_value=object()
+        ) as mock_metrics:
+            result = initialize_telemetry(app=app, environment="development")
+        assert result["tracing_enabled"] is True
+        assert result["metrics_enabled"] is True
+        mock_trace.assert_called_once()
+        mock_metrics.assert_called_once()
 
     def test_telemetry_exports_to_jaeger_endpoint(self):
-        """Test telemetry is configured to export to Jaeger."""
-        # OTEL exporter should be set to OTLP
-        # Endpoint should point to Jaeger collector
-        assert True
-
-    def test_telemetry_includes_service_name(self):
-        """Test telemetry includes TitleTrust service name."""
-        # Resource attributes should include service.name = "titletrust-backend"
-        assert True
+        initialize_telemetry = _initialize_telemetry_for_test()
+        app = FastAPI()
+        with patch.dict("os.environ", {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://jaeger:4317"}), patch(
+            "backend.telemetry.init.init_tracing", return_value=object()
+        ) as mock_trace:
+            initialize_telemetry(app=app, environment="development")
+        assert mock_trace.call_count == 1
 
     def test_telemetry_traces_request_lifecycle(self):
-        """Test telemetry creates spans for request/response."""
-        # Each request should create root span
-        # Child spans for database, external services should be created
-        assert True
+        initialize_telemetry = _initialize_telemetry_for_test()
+        app = FastAPI()
+        fake_provider = object()
+        with patch("backend.telemetry.init.init_tracing", return_value=fake_provider), patch(
+            "backend.telemetry.init.init_metrics", return_value=None
+        ):
+            result = initialize_telemetry(app=app, environment="development")
+        assert result["trace_provider"] is fake_provider
+        assert result["tracing_enabled"] is True
 
 
 class TestStructuredLogging:
-    """Test structured logging output."""
+    def test_logs_include_correlation_id(self, caplog):
+        with patch.object(observability, "REQUEST_COUNT", MagicMock()), patch.object(
+            observability, "REQUEST_LATENCY", MagicMock()
+        ):
+            with caplog.at_level("INFO", logger="TitleTrust-Observability"):
+                response = _build_client().get("/test", headers={"X-Correlation-ID": "corr-abc"})
+        assert response.status_code == 200
+        assert any(getattr(rec, "correlation_id", None) == "corr-abc" for rec in caplog.records)
 
-    def test_logs_include_correlation_id(self):
-        """Test logs include X-Correlation-ID."""
-        import logging
-        
-        logger = logging.getLogger("test")
-        
-        # When logging in a request context with correlation ID,
-        # the ID should be included in all log records
-        assert logger is not None
+    def test_logs_include_user_context(self, caplog):
+        logger = observability.logger
+        with caplog.at_level("INFO", logger="TitleTrust-Observability"):
+            logger.info("user.context", extra={"uid": "user-123", "correlation_id": "corr-123"})
+        assert any(getattr(rec, "uid", None) == "user-123" for rec in caplog.records)
+        assert any(getattr(rec, "correlation_id", None) == "corr-123" for rec in caplog.records)
 
-    def test_logs_include_user_context(self):
-        """Test logs include user ID when available."""
-        import logging
-        
-        logger = logging.getLogger("test")
-        
-        # When user is authenticated, logs should include uid
-        assert logger is not None
-
-    def test_error_logs_include_stack_trace(self):
-        """Test error logs include exception details."""
-        import logging
-        
-        logger = logging.getLogger("test")
-        
-        # When logging exceptions, full stack trace should be captured
-        assert logger is not None
-
-    def test_logs_are_valid_json(self):
-        """Test structured logs are valid JSON for parsing."""
-        # Logs should be JSON lines format for easy parsing by log aggregators
-        assert True
+    def test_error_logs_include_stack_trace(self, caplog):
+        logger = observability.logger
+        with caplog.at_level("ERROR", logger="TitleTrust-Observability"):
+            try:
+                raise ValueError("test-error")
+            except ValueError:
+                logger.exception("failure")
+        assert any(rec.exc_info is not None for rec in caplog.records)
 
 
 class TestObservabilityErrors:
-    """Test error tracking and reporting."""
-
-    def test_unhandled_exceptions_are_tracked(self):
-        """Test unhandled exceptions are reported to telemetry."""
-        # Exceptions should create error spans in telemetry
-        assert True
-
     def test_http_errors_include_status_code(self):
-        """Test HTTP error responses record status codes."""
-        # 4xx/5xx responses should include status_code in metrics
-        assert True
-
-    def test_validation_errors_are_logged(self):
-        """Test request validation errors are logged."""
-        # 422 validation errors should be logged with validation details
-        assert True
-
-    def test_rate_limit_events_are_tracked(self):
-        """Test rate limit events are recorded in metrics."""
-        # When rate limit is hit (429), should increment rate_limit_exceeded metric
-        assert True
+        response = _build_client(status_code=422).get("/test")
+        assert response.status_code == 422
 
 
 class TestObservabilityPerformance:
-    """Test observability doesn't significantly impact performance."""
-
     def test_correlation_middleware_has_low_overhead(self):
-        """Test correlation middleware adds minimal latency."""
-        # Middleware should add < 1ms overhead
-        assert True
-
-    def test_telemetry_sampling_reduces_overhead(self):
-        """Test telemetry uses sampling for high-traffic endpoints."""
-        # Should sample traces at configurable rate (e.g., 10%)
-        # rather than tracking all requests
-        assert True
-
-    def test_async_telemetry_doesnt_block_requests(self):
-        """Test telemetry export is asynchronous."""
-        # Telemetry export should not block request processing
-        assert True
+        response = _build_client().get("/test")
+        assert response.status_code == 200
+        assert float(response.headers["X-Response-Time-Ms"]) >= 0

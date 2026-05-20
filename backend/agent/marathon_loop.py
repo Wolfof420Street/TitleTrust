@@ -20,6 +20,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger("MarathonAgent")
+MAX_SEARCH_TEXT_LEN = 10_000
 
 
 # --- Configuration ---
@@ -351,8 +352,9 @@ class MarathonLoop:
                 ),
                 config=types.GenerateContentConfig(tools=[tool])
             )
-            self._log_usage("google_search", response)
             text = response.text if response.text else "No specific text results found."
+            text = text[:MAX_SEARCH_TEXT_LEN]
+            self._log_usage("google_search", response, text_preview=text)
             return {
                 "status": "success",
                 "provider": "gemini_google_search",
@@ -370,7 +372,7 @@ class MarathonLoop:
                 "text": f"Search Error: {str(e)}",
             }
 
-    def _log_usage(self, operation: str, response: Any) -> None:
+    def _log_usage(self, operation: str, response: Any, text_preview: Optional[str] = None) -> None:
         usage = getattr(response, "usage_metadata", None)
         if not usage:
             return
@@ -382,6 +384,7 @@ class MarathonLoop:
                 "prompt_tokens": getattr(usage, "prompt_token_count", None),
                 "candidates_tokens": getattr(usage, "candidates_token_count", None),
                 "total_tokens": getattr(usage, "total_token_count", None),
+                "text_preview_len": len(text_preview or ""),
             },
         )
 
@@ -775,6 +778,7 @@ class MarathonLoop:
                     "evidence": "See investigation logs. Maximum steps reached after mandatory verification.",
                     "confidence": "medium"
                 }]
+                state.findings = final_findings
                 self.sync_service.update_session_state(
                     self.session_id,
                     status="COMPLETED",

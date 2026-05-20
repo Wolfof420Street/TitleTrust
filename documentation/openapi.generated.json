@@ -1002,6 +1002,8 @@
               "type": "string",
               "format": "binary"
             },
+            "minItems": 1,
+            "maxItems": 50,
             "type": "array",
             "title": "Files"
           }

@@ -1,16 +1,18 @@
-from fastapi import APIRouter, Request
-from starlette.responses import StreamingResponse
 import asyncio
 import json
+import logging
+import time
+
+from fastapi import APIRouter, HTTPException, Request
+from starlette.responses import StreamingResponse
 
 from backend.realtime.broadcaster import broadcaster
 from backend.services.firebase import db
 from backend.repositories.session_repository import SessionRepository
 from backend.repositories.job_repository import JobRepository
 from backend.config import settings
-import json
-import time
-from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
 
@@ -32,14 +34,13 @@ async def sse_endpoint(request: Request):
                     break
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=15.0)
+                    retry_hint = 3000
+                    yield f":retry: {retry_hint}\n"
+                    yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     # send a heartbeat comment to keep connection alive
                     yield "\n"
                     continue
-                    # Optionally include SSE retry hint (ms)
-                    retry_hint = 3000
-                    yield f":retry: {retry_hint}\n"
-                    yield f"data: {payload}\n\n"
         finally:
             await broadcaster.unregister(q)
 
@@ -86,8 +87,9 @@ async def last_state(session_id: str):
             "evidence": evidence,
             "last_event_id": last_event_id,
         }
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("Failed to fetch last-state", extra={"session_id": session_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/health")

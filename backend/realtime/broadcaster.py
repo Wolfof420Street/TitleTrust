@@ -70,6 +70,7 @@ class Broadcaster:
         self.metrics_replay_duration = _metric(Histogram, "titletrust_realtime_replay_duration_seconds", "Duration of replay fetches")
         self.metrics_redis_failover = _metric(Gauge, "titletrust_realtime_redis_failover_mode", "1 when operating in degraded (no-redis) mode")
         self.metrics_oversized_payloads = _metric(Counter, "titletrust_realtime_oversized_payloads_total", "Events rejected for exceeding max payload size")
+        self.metrics_redis_listener_restarts = _metric(Counter, "titletrust_realtime_redis_listener_restarts_total", "Redis listener restarts")
 
         # Start background Redis listener if enabled
         if settings.REDIS_PUBSUB_ENABLED and settings.REDIS_URL:
@@ -151,6 +152,7 @@ class Broadcaster:
         attempt = 0
         base = 0.5
         while self._running:
+            pubsub = None
             try:
                 pubsub = self._redis.pubsub()
                 await pubsub.subscribe(settings.BROADCASTER_CHANNEL)
@@ -174,11 +176,6 @@ class Broadcaster:
             except Exception as e:
                 attempt += 1
                 self.metrics_redis_reconnects.inc()
-                self.metrics_redis_listener_restarts = getattr(self, "metrics_redis_listener_restarts", None)
-                if self.metrics_redis_listener_restarts is None:
-                    from prometheus_client import Counter
-
-                    self.metrics_redis_listener_restarts = Counter("titletrust_realtime_redis_listener_restarts_total", "Redis listener restarts")
                 self.metrics_redis_listener_restarts.inc()
                 logger.exception("Redis subscriber loop failed, will retry: %s", e)
                 # exponential backoff with jitter
@@ -194,6 +191,12 @@ class Broadcaster:
                     except Exception:
                         pass
                 continue
+            finally:
+                if pubsub is not None:
+                    try:
+                        await pubsub.aclose()
+                    except Exception:
+                        logger.debug("Failed to close redis pubsub cleanly", exc_info=True)
 
     async def _stream_add(self, payload: str) -> Optional[str]:
         """Append event to Redis Stream for durable replay. Returns stream id on success."""

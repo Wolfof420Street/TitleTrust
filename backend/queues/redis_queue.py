@@ -71,47 +71,53 @@ class RedisQueue:
         self._execute("enqueue", lambda: self._client.rpush(queue_name, json.dumps(envelope)))
 
     def pop(self, queue_name: str, timeout_seconds: int = 5) -> Optional[Dict[str, Any]]:
-        if not self._client:
+        try:
+            item = self._execute("pop", lambda: self._client.blpop(queue_name, timeout=timeout_seconds))
+        except RuntimeError:
             return None
-        item = self._execute("pop", lambda: self._client.blpop(queue_name, timeout=timeout_seconds))
         if not item:
             return None
         _, raw = item
         return json.loads(raw)
 
     def set_heartbeat(self, worker_id: str) -> None:
-        if not self._client:
-            return
-        self._execute(
-            "set_heartbeat",
-            lambda: self._client.setex(
-                f"worker-heartbeat:{worker_id}",
-                settings.WORKER_HEARTBEAT_TTL_SECONDS,
-                str(time.time()),
-            ),
-        )
+        try:
+            self._execute(
+                "set_heartbeat",
+                lambda: self._client.setex(
+                    f"worker-heartbeat:{worker_id}",
+                    settings.WORKER_HEARTBEAT_TTL_SECONDS,
+                    str(time.time()),
+                ),
+            )
+        except RuntimeError:
+            logger.warning("Redis heartbeat skipped: backend unavailable")
 
     def cancel(self, job_id: str) -> None:
-        if not self._client:
-            return
-        self._execute(
-            "cancel",
-            lambda: self._client.set(f"cancel-job:{job_id}", "1", ex=settings.WORKER_TASK_TIMEOUT_SECONDS),
-        )
+        try:
+            self._execute(
+                "cancel",
+                lambda: self._client.set(f"cancel-job:{job_id}", "1", ex=settings.WORKER_TASK_TIMEOUT_SECONDS),
+            )
+        except RuntimeError:
+            logger.warning("Redis cancel marker skipped: backend unavailable")
 
     def is_cancelled(self, job_id: str) -> bool:
-        if not self._client:
+        try:
+            return bool(self._execute("is_cancelled", lambda: self._client.get(f"cancel-job:{job_id}") == "1"))
+        except RuntimeError:
             return False
-        return self._execute("is_cancelled", lambda: self._client.get(f"cancel-job:{job_id}") == "1")
 
     def queue_depth(self, queue_name: str) -> int:
-        if not self._client:
+        try:
+            depth = self._execute("queue_depth", lambda: self._client.llen(queue_name))
+            if depth is None:
+                return 0
+            return int(depth)
+        except RuntimeError:
             return 0
-        return int(self._client.llen(queue_name))
 
     def ping(self) -> bool:
-        if not self._client:
-            return False
         try:
             return bool(self._execute("ping", lambda: self._client.ping()))
         except Exception:

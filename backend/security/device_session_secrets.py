@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import logging
 import os
 from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag
 
 try:
     from backend.config import settings
@@ -35,10 +37,18 @@ class DeviceSessionSecretProtector:
         return base64.urlsafe_b64encode(nonce + ciphertext).decode("utf-8")
 
     def decrypt(self, ciphertext: str) -> str:
-        raw = base64.urlsafe_b64decode(ciphertext.encode("utf-8"))
+        try:
+            raw = base64.urlsafe_b64decode(ciphertext.encode("utf-8"))
+        except binascii.Error as exc:
+            raise ValueError("invalid base64 ciphertext") from exc
+        if len(raw) < 13:
+            raise ValueError("ciphertext too short")
         nonce, encrypted = raw[:12], raw[12:]
         aesgcm = AESGCM(self._wrapping_key())
-        return aesgcm.decrypt(nonce, encrypted, None).decode("utf-8")
+        try:
+            return aesgcm.decrypt(nonce, encrypted, None).decode("utf-8")
+        except InvalidTag as exc:
+            raise ValueError("decryption failed: authentication error") from exc
 
     def _wrapping_key(self) -> bytes:
         configured_secret = self._secret_manager.get_secret("device-session-wrapping-key", required=False)

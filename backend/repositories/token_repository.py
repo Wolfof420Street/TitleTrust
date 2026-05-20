@@ -268,7 +268,7 @@ class TokenRepository:
 
             batch.commit()
 
-            logger.error(
+            logger.warning(
                 f"Revoked entire token family {token_family} ({count} tokens): {reason}"
             )
             return count

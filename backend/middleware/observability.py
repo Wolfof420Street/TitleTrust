@@ -5,6 +5,8 @@ from prometheus_client import Counter, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import logging
+import json
+from fastapi.responses import JSONResponse
 
 try:
     from opentelemetry import trace
@@ -23,15 +25,21 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = correlation_id
         trace_id = None
         start = time.perf_counter()
-        if TRACER:
-            with TRACER.start_as_current_span(request.url.path) as span:
-                span.set_attribute("http.method", request.method)
-                span.set_attribute("correlation_id", correlation_id)
+        try:
+            if TRACER:
+                with TRACER.start_as_current_span(request.url.path) as span:
+                    span.set_attribute("http.method", request.method)
+                    span.set_attribute("correlation_id", correlation_id)
+                    response = await call_next(request)
+                    span.set_attribute("http.status_code", response.status_code)
+                    trace_id = f"{span.get_span_context().trace_id:032x}"
+            else:
                 response = await call_next(request)
-                span.set_attribute("http.status_code", response.status_code)
-                trace_id = f"{span.get_span_context().trace_id:032x}"
-        else:
-            response = await call_next(request)
+        except Exception:
+            # Ensure middleware records metrics and returns a 500 response rather than letting
+            # the exception bypass observability hooks. This keeps metrics accurate.
+            response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
+            trace_id = None
         elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
         response.headers["X-Correlation-ID"] = correlation_id
         response.headers["X-Response-Time-Ms"] = str(elapsed_ms)

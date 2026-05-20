@@ -194,7 +194,7 @@ class TestAuditForensicEndpoint:
             files={"files": ("test.pdf", b"content", "application/pdf")},
         )
         
-        assert response.status_code in [200, 401, 403, 422]
+        assert response.status_code in [401, 403, 422]
 
     def test_forensic_audit_includes_correlation_id(
         self, client, auth_headers, monkeypatch
@@ -232,6 +232,9 @@ class TestAuditForensicEndpoint:
         # Verify correlation_id was passed to service
         if response.status_code in [200, 422]:
             mock_service.enqueue_forensic.assert_called()
+            call = mock_service.enqueue_forensic.call_args
+            assert "correlation_id" in call.kwargs
+            assert call.kwargs["correlation_id"] == auth_headers["X-Correlation-ID"]
 
 
 class TestAuditGeospatialEndpoint:
@@ -327,7 +330,7 @@ class TestAuditGeospatialEndpoint:
             files={"file": ("test.pdf", b"content", "application/pdf")},
         )
         
-        assert response.status_code in [200, 401, 403, 422]
+        assert response.status_code in [401, 403, 422]
 
 
 class TestAuditStartEndpoint:
@@ -411,7 +414,7 @@ class TestAuditStartEndpoint:
             files={"file": ("test.pdf", b"content", "application/pdf")},
         )
         
-        assert response.status_code in [200, 401, 403, 422]
+        assert response.status_code in [401, 403, 422]
 
 
 class TestAuditStatusEndpoint:
@@ -515,4 +518,4 @@ class TestAuditJobStatusEndpoint:
         """Test job status requires READ_AUDIT permission."""
         response = client.get("/audit/jobs/job-123")
         
-        assert response.status_code in [200, 401, 403, 422]
+        assert response.status_code in [401, 403, 422]

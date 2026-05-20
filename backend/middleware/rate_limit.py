@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 from fastapi import HTTPException, Request, status
 
@@ -13,6 +14,7 @@ except ImportError:  # pragma: no cover - fallback for local module execution
 
 settings = get_settings()
 store = build_store(getattr(settings, "REDIS_URL", None))
+logger = logging.getLogger("TitleTrust-RateLimit")
 
 
 def _request_key(request: Request) -> str:
@@ -26,12 +28,18 @@ def _request_key(request: Request) -> str:
 
 
 async def enforce_rate_limit(request: Request) -> None:
+    if store is None:
+        return
     key = _request_key(request)
-    remaining = store.hit(
-        key=key,
-        limit=settings.API_RATE_LIMIT_PER_MINUTE,
-        window_seconds=60,
-    )
+    try:
+        remaining = store.hit(
+            key=key,
+            limit=settings.API_RATE_LIMIT_PER_MINUTE,
+            window_seconds=60,
+        )
+    except Exception:
+        logger.warning("Rate-limit backend unavailable; skipping enforcement", exc_info=True)
+        return
     if remaining <= 0:
             # Emit realtime event about rate limit enforcement (best-effort)
             try:

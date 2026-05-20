@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 import googlemaps
 import uuid
 import hashlib
@@ -23,6 +24,7 @@ except ImportError:
             VERTEX_AI_LOCATION = "us-central1"
             MAPS_API_KEY = "dummy"
             FORENSIC_MODEL_NAME = "gemini-3-pro-preview"
+            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         settings = Settings()
 
 # Import models for the adapter
@@ -41,7 +43,7 @@ except ImportError:
     try:
         from agent.tools import get_satellite_ground_truth
     except ImportError:
-        pass
+        get_satellite_ground_truth = None
 
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [GEO-AGENT] - %(message)s")
@@ -67,7 +69,7 @@ class GeoVerificationAgent:
         )
 
         # 1. Tool Definitions (Pass python function directly)
-        self.tools = [get_satellite_ground_truth]
+        self.tools = [t for t in (get_satellite_ground_truth,) if t is not None]
 
         # 2. System Persona (The Surveyor)
         self.system_instruction = """
@@ -100,7 +102,7 @@ class GeoVerificationAgent:
             import asyncio
             from backend.realtime.events import emit
 
-            payload = {"lat": lat, "lng": lng, "file_path": file_path}
+            payload = {"lat": lat, "lng": lng, "file_id": os.path.basename(file_path)}
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(emit("agent.started", payload, severity="info"))
@@ -178,7 +180,7 @@ class GeoVerificationAgent:
                 result["evidence_sha256"] = hashlib.sha256(
                     json.dumps(
                         {
-                            "file_path": file_path,
+                            "file_id": os.path.basename(file_path),
                             "lat": lat,
                             "lng": lng,
                             "response": result,

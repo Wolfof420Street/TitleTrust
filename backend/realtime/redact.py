@@ -16,7 +16,11 @@ def _redact_str(s: str, max_len: int = 200) -> str:
     if len(s) > max_len:
         s = s[:max_len] + "...[truncated]"
     # simple key=value redaction
-    s = re.sub(r"(?i)(api[_-]?key|token|secret|authorization)=\S+", r"\1=[REDACTED]", s)
+    s = re.sub(
+        r"(?i)(api[_-]?key|token|secret|authorization|password)\s*=\s*(?:\".*?\"|'.*?'|[^\s,;]+)",
+        r"\1=[REDACTED]",
+        s,
+    )
     return s
 
 

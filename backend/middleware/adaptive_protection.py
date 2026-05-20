@@ -6,6 +6,8 @@ import asyncio
 import inspect
 import json
 import logging
+import re
+import threading
 from typing import Callable, Optional
 
 from fastapi import Request, Response
@@ -15,6 +17,43 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from backend.security.abuse_detection import AbuseAction, AbuseDetectionEngine
 
 logger = logging.getLogger("TitleTrust-AdaptiveProtection")
+
+_UUID_SEGMENT = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+_NUMERIC_SEGMENT = re.compile(r"^\d+$")
+_BG_LOOP: asyncio.AbstractEventLoop | None = None
+_BG_LOOP_LOCK = threading.Lock()
+
+
+def _normalize_path(path: str) -> str:
+    if not path:
+        return "/"
+    parts = []
+    for part in path.split("/"):
+        if _UUID_SEGMENT.fullmatch(part):
+            parts.append("{uuid}")
+        elif _NUMERIC_SEGMENT.fullmatch(part):
+            parts.append("{id}")
+        else:
+            parts.append(part)
+    return "/".join(parts) or "/"
+
+
+def _ensure_background_loop() -> asyncio.AbstractEventLoop:
+    global _BG_LOOP
+    if _BG_LOOP and _BG_LOOP.is_running():
+        return _BG_LOOP
+    with _BG_LOOP_LOCK:
+        if _BG_LOOP and _BG_LOOP.is_running():
+            return _BG_LOOP
+        loop = asyncio.new_event_loop()
+
+        def _run() -> None:
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        threading.Thread(target=_run, daemon=True).start()
+        _BG_LOOP = loop
+        return loop
 
 ABUSE_ASSESSMENTS = Counter(
     "titletrust_abuse_assessments_total",
@@ -68,11 +107,12 @@ class AdaptiveProtectionMiddleware(BaseHTTPMiddleware):
 
         request.state.abuse_assessment = assessment
         self._abuse_engine.record_threat_indicator(assessment, tenant_id, device_id)
-        ABUSE_ASSESSMENTS.labels(assessment.action.value, tenant_id, request.url.path).inc()
-        ABUSE_SCORE.labels(tenant_id, request.url.path).observe(assessment.score)
+        normalized_path = _normalize_path(request.url.path)
+        ABUSE_ASSESSMENTS.labels(assessment.action.value, tenant_id, normalized_path).inc()
+        ABUSE_SCORE.labels(tenant_id, normalized_path).observe(assessment.score)
 
         if assessment.action == AbuseAction.BLOCK:
-            ABUSE_BLOCKS.labels(tenant_id, request.url.path).inc()
+            ABUSE_BLOCKS.labels(tenant_id, normalized_path).inc()
             logger.warning(
                 "abuse.blocked",
                 extra={"correlation_id": correlation_id, "tenant_id": tenant_id, "score": assessment.score},
@@ -87,17 +127,10 @@ class AdaptiveProtectionMiddleware(BaseHTTPMiddleware):
                     loop = asyncio.get_running_loop()
                     loop.create_task(emit("security.blocked", payload, severity="warning", correlation_id=correlation_id))
                 except RuntimeError:
-                    import threading
-
-                    def _bg():
-                        import asyncio as _asyncio
-                        from backend.realtime.events import emit as _emit
-                        try:
-                            _asyncio.run(_emit("security.blocked", payload, severity="warning", correlation_id=correlation_id))
-                        except Exception:
-                            pass
-
-                    threading.Thread(target=_bg, daemon=True).start()
+                    asyncio.run_coroutine_threadsafe(
+                        emit("security.blocked", payload, severity="warning", correlation_id=correlation_id),
+                        _ensure_background_loop(),
+                    )
             except Exception:
                 pass
 

@@ -119,7 +119,10 @@ class CloudStorageService:
         parsed = urlparse(object_path)
         if parsed.scheme != "gs" or not parsed.netloc or not parsed.path:
             raise ValueError("object_path must use the gs://bucket/object format")
-        return parsed.netloc, parsed.path.lstrip("/")
+        object_name = parsed.path.lstrip("/")
+        if not object_name:
+            raise ValueError("object_path must include a non-empty object name")
+        return parsed.netloc, object_name
 
 
 cloud_storage_service = CloudStorageService()

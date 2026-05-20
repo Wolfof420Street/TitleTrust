@@ -12,10 +12,19 @@ spec:
       labels:
         app: titletrust-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: worker
-          image: titletrust-backend:latest
+          image: titletrust-backend:v1.0.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command: ["python", "-m", "backend.workers.run_worker"]
           env:
             - name: QUEUE_MODE

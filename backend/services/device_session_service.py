@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 from typing import Dict, List
 
 try:
@@ -28,6 +29,9 @@ class DeviceSessionService:
             raise ValueError("Device session payload must include a non-empty request_secret")
 
         existing = self._repository.get(session_id) or {}
+        if existing:
+            if existing.get("user_id") != user_id or existing.get("organization_id") != organization_id:
+                raise ValueError("Device session ownership mismatch")
         request_secret_fingerprint = device_session_secret_protector.fingerprint(request_secret)
         stored_payload = {
             key: value
@@ -43,7 +47,13 @@ class DeviceSessionService:
             stored_payload["previous_request_secret_fingerprint"] = existing.get("request_secret_fingerprint")
             stored_payload["request_secret_version"] = int(existing.get("request_secret_version", 1) or 1) + 1
             stored_payload["request_secret_rotated_at"] = __import__("datetime").datetime.now().isoformat()
-            logger.info("Device session request secret rotated", extra={"session_id": session_id, "user_id": user_id})
+            logger.info(
+                "Device session request secret rotated",
+                extra={
+                    "hashed_session_id": hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12],
+                    "hashed_user_id": hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:12],
+                },
+            )
 
         self._repository.upsert(
             payload["session_id"],

@@ -438,14 +438,15 @@ Objective, skeptical, and legally precise. Focus on evidence-based conclusions.
             if response.parsed:
                 result = response.parsed.model_dump()
                 result["trace_id"] = f"forensic-{uuid.uuid4().hex[:12]}"
+                hash_payload = {
+                    "file_uri": getattr(file_ref, "uri", file_path),
+                    "file_mime_type": getattr(file_ref, "mime_type", None),
+                    "response": {k: v for k, v in result.items() if k != "trace_id"},
+                    "response_text": response.text if hasattr(response, "text") else None,
+                }
                 result["evidence_sha256"] = hashlib.sha256(
                     json.dumps(
-                        {
-                            "file_uri": getattr(file_ref, "uri", file_path),
-                            "file_mime_type": getattr(file_ref, "mime_type", None),
-                            "response": result,
-                            "response_text": response.text if hasattr(response, "text") else None,
-                        },
+                        hash_payload,
                         sort_keys=True,
                         default=str,
                     ).encode("utf-8")

@@ -23,13 +23,18 @@ async def create_signed_upload_url(
     payload: SignedUploadRequest,
     user: Dict[str, Any] = Depends(require_permission(Permission.AUDIT_START)),
 ):
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication context")
+    user_id = user.get("uid")
     claims = user.get("claims", {}) if isinstance(user, dict) else {}
-    organization_id = claims.get("org_id") or user.get("org_id") or "personal"
+    organization_id = claims.get("org_id") or user.get("org_id")
+    if not user_id or not organization_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authenticated identity context")
     try:
         return cloud_storage_service.create_signed_upload(
             filename=payload.filename,
             content_type=payload.content_type,
-            user_id=user.get("uid", "unknown"),
+            user_id=user_id,
             organization_id=organization_id,
             purpose=payload.purpose,
         )
