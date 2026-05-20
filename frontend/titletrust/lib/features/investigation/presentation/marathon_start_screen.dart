@@ -7,6 +7,7 @@ import 'package:titletrust/core/ui/adaptive/adaptive_scaffold.dart';
 import 'package:titletrust/features/investigation/data/marathon_service.dart';
 import 'package:titletrust/features/investigation/presentation/investigation_screen.dart';
 import 'package:titletrust/core/services/job_state_service.dart';
+import 'package:titletrust/telemetry/frontend_telemetry_service.dart';
 
 class MarathonStartScreen extends ConsumerStatefulWidget {
   const MarathonStartScreen({super.key});
@@ -36,20 +37,37 @@ class _MarathonStartScreenState extends ConsumerState<MarathonStartScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final sessionId = await ref.read(marathonServiceProvider).startInvestigation(_selectedFile!);
+      final result = await ref.read(marathonServiceProvider).startInvestigation(_selectedFile!);
 
       // PERSIST JOB STATE
-      await ref.read(jobStateServiceProvider).setActiveJob(sessionId);
+      await ref.read(jobStateServiceProvider).setActiveJob(result.sessionId);
 
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => InvestigationScreen(sessionId: sessionId)),
+          MaterialPageRoute(builder: (_) => InvestigationScreen(sessionId: result.sessionId)),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      // Isolate telemetry errors so snackbar always displays
+      try {
+        await Future.wait([
+          FrontendTelemetryService().reportHandledError(
+            e,
+            stackTrace,
+            context: 'marathon_start_failed',
+          ),
+        ]).timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => <void>[],
+        );
+      } catch (_) {
+        // Ignore telemetry failures; proceed to user-facing recovery
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Operation failed. Please try again.')),
+        );
       }
     } finally {
       if (mounted) {

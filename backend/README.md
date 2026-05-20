@@ -1,67 +1,52 @@
 # TitleTrust Backend
 
-The backend for TitleTrust is a high-performance **FastAPI** application that powers the forensic and geospatial verification engines. It integrates with Google Cloud Vertex AI (Gemini) and Google Maps Platform to provide real-time auditing and analysis.
+This backend is a FastAPI application that powers the forensic, geospatial, and realtime verification workflow. The current code routes realtime through SSE and uses Firestore-backed session/job state plus optional Redis fanout for live updates.
 
-## Features
+## What it actually does
 
-- **Forensic Engine**: analyzing "Deal Packs" (Title Deeds, Green Cards, etc.) using AI to detect fraud and inconsistencies.
-- **Geospatial Engine**: Verifies physical site locations by cross-referencing uploaded site photos with satellite imagery using Vision-Map Sync.
-- **FastAPI**: Asynchronous, high-speed API endpoints.
+- Authenticates and rate limits API traffic in `backend/main.py`.
+- Runs forensic and geospatial audit routes through `backend/api/audit_router.py`.
+- Exposes realtime streaming and recovery endpoints through `backend/api/realtime_router.py`.
+- Persists session/job/audit state in Firestore via the repository layer.
+- Starts the realtime broadcaster at app startup and stops it at shutdown.
 
-## Tech Stack
+## Key runtime entry points
 
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/)
-- **AI/ML**: [Google Cloud Vertex AI](https://cloud.google.com/vertex-ai) (Gemini Pro Vision)
-- **Maps**: [Google Maps API](https://developers.google.com/maps)
-- **Server**: [Uvicorn](https://www.uvicorn.org/)
+- Backend app: [backend/main.py](backend/main.py)
+- Realtime routes: [backend/api/realtime_router.py](backend/api/realtime_router.py)
+- Forensic engine: [backend/forensic_engine.py](backend/forensic_engine.py)
+- Geospatial engine: [backend/geospatial_engine.py](backend/geospatial_engine.py)
+- Marathon loop: [backend/agent/marathon_loop.py](backend/agent/marathon_loop.py)
 
-## Prerequisites
+## Real API surface
 
-- Python 3.9+
-- Google Cloud Platform Account (with Vertex AI enabled)
-- Google Maps API Key
+The current backend exposes, among other routes:
 
-## Setup
+- `GET /realtime/sse`
+- `GET /realtime/last-state/{session_id}`
+- `GET /realtime/health`
+- `GET /realtime/debug/subscribers`
+- `GET /realtime/debug/streams`
 
-1.  **Navigate to the project root** (where `requirements.txt` is located).
+The broader application also includes auth, upload, health, and audit routes wired in `backend/main.py`.
 
-2.  **Create a virtual environment:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
+## Realtime behavior
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+- [backend/realtime/broadcaster.py](backend/realtime/broadcaster.py) fans out events locally and can optionally use Redis Pub/Sub and Redis Streams.
+- [backend/realtime/events.py](backend/realtime/events.py) builds structured envelopes with `event_type`, `timestamp`, `trace_id`, `session_id`, `job_id`, and redacted payloads.
+- [backend/realtime/store.py](backend/realtime/store.py) provides in-memory replay or Redis Streams replay.
 
-4.  **Configuration:**
-    Ensure you have your authentication credentials set up for Google Cloud (e.g., `GOOGLE_APPLICATION_CREDENTIALS` environment variable) and any necessary API keys.
-
-## Running the Server
-
-Run the server from the project root directory:
+## Running locally
 
 ```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn backend.main:app --reload
 ```
 
-- **API Docs (Swagger UI)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+## Documentation
 
-## API Endpoints
-
-### Forensic Audit
-`POST /audit/forensic`
-- Upload multiple documents (PDF, Images).
-- Returns analysis findings and status.
-
-### Geospatial Audit
-`POST /audit/geospatial`
-- Inputs: `lat`, `lng`, `image` (site photo).
-- Returns verification result (`SAFE`, `RISK`, `UNCERTAIN`) and analysis details.
-
-### Health Check
-`GET /`
-- Returns status of the API.
+- API reference: [documentation/API_REFERENCE.md](../documentation/API_REFERENCE.md)
+- Architecture notes: [documentation/SYSTEM_ARCHITECTURE.md](../documentation/SYSTEM_ARCHITECTURE.md)
+- Realtime architecture: [documentation/REALTIME_ARCHITECTURE.md](../documentation/REALTIME_ARCHITECTURE.md)

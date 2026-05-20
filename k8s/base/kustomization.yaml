@@ -1,0 +1,6 @@
+resources:
+  - deployment.yaml
+  - worker-deployment.yaml
+  - service.yaml
+  - backend-hpa.yaml
+  - worker-hpa.yaml

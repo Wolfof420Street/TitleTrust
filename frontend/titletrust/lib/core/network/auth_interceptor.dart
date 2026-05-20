@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -9,20 +10,20 @@ class AuthInterceptor extends Interceptor {
 
     if (user != null) {
       try {
-        final token = await user.getIdToken();
-        if (token != null) {
+        final token = await user.getIdToken(false);
+        if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
       } catch (e, stackTrace) {
-        // Log error but proceed without token if fetching fails
         developer.log(
-          "AuthInterceptor: Failed to get token",
+          'AuthInterceptor token fetch failed',
           error: e,
           stackTrace: stackTrace,
+          name: 'titletrust.auth',
         );
       }
     }
 
-    return super.onRequest(options, handler);
+    handler.next(options);
   }
 }

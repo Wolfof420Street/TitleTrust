@@ -1,7 +1,10 @@
 import os
 import re
 import json
+import math
 import logging
+import hashlib
+import uuid
 import requests
 import base64
 from io import BytesIO
@@ -12,17 +15,36 @@ from datetime import datetime
 import googlemaps
 from google import genai
 from google.genai import types
+from pydantic import BaseModel, Field
 
 # Local Config
-from config import settings
+try:
+    from backend.config import settings
+except ModuleNotFoundError:
+    from config import settings
 
 # --- SETUP ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [TOOLS] - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Initialize Google Maps Client
-# Production: Fail fast if Key is missing
-gmaps = googlemaps.Client(key=settings.MAPS_API_KEY)
+KENYA_LAT_RANGE = (-5.5, 5.5)
+KENYA_LNG_RANGE = (33.0, 42.5)
+HTTP_TIMEOUT_SECONDS = 10
+
+# Lazy-load Google Maps Client to allow imports without API key
+_gmaps_client = None
+
+def _get_gmaps_client() -> Optional[googlemaps.Client]:
+    """Lazy-load Google Maps client on first use."""
+    global _gmaps_client
+    if _gmaps_client is None:
+        if settings.MAPS_API_KEY:
+            try:
+                _gmaps_client = googlemaps.Client(key=settings.MAPS_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to initialize Google Maps client: {e}")
+                _gmaps_client = False  # Sentinel for failed initialization
+    return _gmaps_client if _gmaps_client is not False else None
 
 # ==========================================
 # 1. LEGAL & FORMAT TOOLS
@@ -122,7 +144,7 @@ def get_satellite_image(lat: float, lng: float, zoom: int = 18) -> Dict[str, Any
     }
     
     try:
-        response = requests.get(base_url, params=params)
+        response = requests.get(base_url, params=params, timeout=HTTP_TIMEOUT_SECONDS)
         response.raise_for_status()
         
         # Convert binary to base64 for Gemini
@@ -134,6 +156,12 @@ def get_satellite_image(lat: float, lng: float, zoom: int = 18) -> Dict[str, Any
             "data": image_b64,
             "metadata": f"Satellite view of {lat}, {lng} at zoom {zoom}"
         }
+    except requests.exceptions.Timeout as e:
+        logger.warning(f"Maps API timed out: {e}")
+        return {"status": "error", "error": "Maps API request timed out"}
+    except requests.exceptions.RequestException as e:
+        print(f"❌ [TOOL ERROR] Maps API failed: {e}")
+        return {"status": "error", "error": str(e)}
     except Exception as e:
         print(f"❌ [TOOL ERROR] Maps API failed: {e}")
         return {"status": "error", "error": str(e)}
@@ -145,7 +173,8 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
     """
     logger.info(f"Querying Maps API for: {lat}, {lng}")
     
-    if not gmaps:
+    gmaps_client = _get_gmaps_client()
+    if not gmaps_client:
         return {"error": "Maps API not configured."}
 
     context = {
@@ -156,7 +185,7 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
 
     try:
         # 1. Reverse Geocode (What is the legal address?)
-        reverse = gmaps.reverse_geocode((lat, lng))
+        reverse = gmaps_client.reverse_geocode((lat, lng))
         if reverse:
             context["formatted_address"] = reverse[0].get('formatted_address', 'Unknown')
             # Extract types (e.g., 'park', 'political', 'establishment')
@@ -164,7 +193,7 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
 
         # 2. Nearby Search (Are we near sensitive features?)
         # We search 200m radius for protected features
-        places = gmaps.places_nearby(
+        places = gmaps_client.places_nearby(
             location=(lat, lng), 
             radius=200, 
             type=['natural_feature', 'park', 'school', 'hospital', 'church']
@@ -190,3 +219,202 @@ def get_satellite_ground_truth(lat: float, lng: float) -> Dict[str, Any]:
         return {"error": str(e)}
 
     return context
+
+
+class BoundaryInspectionResult(BaseModel):
+    coordinates: str
+    rim_consistency: str = Field(description="CONSISTENT, INCONCLUSIVE, or INCONSISTENT")
+    beacon_presence: str = Field(description="VISIBLE, NOT_VISIBLE, or UNCERTAIN")
+    encroachment_indicators: List[str]
+    observed_land_use: str
+    title_land_use_consistency: str = Field(description="CONSISTENT or INCONSISTENT")
+    discrepancy_detected: bool
+    severity: str = Field(description="LOW, MEDIUM, HIGH")
+    reasoning: str
+
+
+def inspect_physical_boundaries(
+    lat: float,
+    lng: float,
+    *,
+    title_context: str,
+    expected_land_use: str | None = None,
+) -> Dict[str, Any]:
+    """Cross-check satellite imagery for beacons, RIM consistency, and encroachment."""
+    satellite = get_satellite_image(lat, lng)
+    if satellite.get("status") != "success":
+        return {"status": "error", "error": satellite.get("error", "Satellite image unavailable")}
+
+    ground_truth = get_satellite_ground_truth(lat, lng)
+    if ground_truth.get("error"):
+        return {"status": "error", "error": ground_truth["error"]}
+
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    prompt = f"""
+You are a Kenyan cadastral and boundary verification specialist performing Step 4 Physical Boundary Verification.
+
+Inspect the satellite image and official map context for:
+1. Survey beacons or other visible boundary markers.
+2. Whether visible parcel edges appear consistent with Registry Index Map (RIM) expectations.
+3. Encroachment indicators: structures, walls, fencing, cultivation, roads, or drainage lines crossing expected boundaries.
+4. Land-use mismatch: if the title context implies VACANT/AGRICULTURAL/RESIDENTIAL but the image shows conflicting use.
+
+Title context:
+{title_context}
+
+Expected land use:
+{expected_land_use or "UNKNOWN"}
+
+Official map context:
+{json.dumps(ground_truth, indent=2)}
+
+Return a strict JSON result. If you see structures or boundary walls where the title context implies vacant land, set discrepancy_detected=true and severity=HIGH.
+"""
+
+    try:
+        response = client.models.generate_content(
+            model=settings.VISION_MODEL_NAME,
+            contents=[
+                types.Part.from_bytes(
+                    data=base64.b64decode(satellite["data"]),
+                    mime_type=str(satellite["mime_type"]),
+                ),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=BoundaryInspectionResult,
+                temperature=0.1,
+            ),
+        )
+        parsed = response.parsed.model_dump() if response.parsed else json.loads(response.text)
+        parsed["status"] = "success"
+        parsed["ground_truth"] = ground_truth
+        parsed["provider"] = "gemini_vision"
+        parsed["trace_id"] = f"vision-{uuid.uuid4().hex[:12]}"
+        parsed["evidence_sha256"] = hashlib.sha256(
+            json.dumps(
+                {
+                    "lat": lat,
+                    "lng": lng,
+                    "title_context": title_context,
+                    "expected_land_use": expected_land_use,
+                    "ground_truth": ground_truth,
+                    "satellite": satellite,
+                    "response": parsed,
+                },
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        return parsed
+    except Exception as e:
+        logger.error(f"Boundary inspection failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+
+def _utm_to_lat_lng(zone_number: int, hemisphere: str, easting: float, northing: float) -> tuple[float, float]:
+    """Convert WGS84 UTM coordinates to latitude/longitude without external dependencies."""
+    a = 6378137.0
+    e = 0.081819191
+    e1sq = 0.006739497
+    k0 = 0.9996
+
+    x = easting - 500000.0
+    y = northing
+    if hemisphere.upper() == "S":
+        y -= 10000000.0
+
+    m = y / k0
+    mu = m / (a * (1 - e**2 / 4 - 3 * e**4 / 64 - 5 * e**6 / 256))
+    e1 = (1 - math.sqrt(1 - e**2)) / (1 + math.sqrt(1 - e**2))
+
+    j1 = 3 * e1 / 2 - 27 * e1**3 / 32
+    j2 = 21 * e1**2 / 16 - 55 * e1**4 / 32
+    j3 = 151 * e1**3 / 96
+    j4 = 1097 * e1**4 / 512
+    fp = mu + j1 * math.sin(2 * mu) + j2 * math.sin(4 * mu) + j3 * math.sin(6 * mu) + j4 * math.sin(8 * mu)
+
+    c1 = e1sq * math.cos(fp) ** 2
+    t1 = math.tan(fp) ** 2
+    r1 = a * (1 - e**2) / (1 - (e * math.sin(fp)) ** 2) ** 1.5
+    n1 = a / math.sqrt(1 - (e * math.sin(fp)) ** 2)
+    d = x / (n1 * k0)
+
+    q1 = n1 * math.tan(fp) / r1
+    q2 = d**2 / 2
+    q3 = (5 + 3 * t1 + 10 * c1 - 4 * c1**2 - 9 * e1sq) * d**4 / 24
+    q4 = (61 + 90 * t1 + 298 * c1 + 45 * t1**2 - 252 * e1sq - 3 * c1**2) * d**6 / 720
+    lat = fp - q1 * (q2 - q3 + q4)
+
+    q5 = d
+    q6 = (1 + 2 * t1 + c1) * d**3 / 6
+    q7 = (5 - 2 * c1 + 28 * t1 - 3 * c1**2 + 8 * e1sq + 24 * t1**2) * d**5 / 120
+    lon = (q5 - q6 + q7) / math.cos(fp)
+    lon0 = math.radians((zone_number - 1) * 6 - 180 + 3)
+
+    return math.degrees(lat), math.degrees(lon0 + lon)
+
+
+def parse_kenyan_coordinates(raw_text: str) -> Dict[str, Any]:
+    """Parse Kenyan decimal or UTM coordinates from deed/agent text."""
+    text = raw_text.strip()
+    decimal_match = re.search(r"(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)", text)
+    if decimal_match:
+        lat = float(decimal_match.group(1))
+        lng = float(decimal_match.group(2))
+        if KENYA_LAT_RANGE[0] <= lat <= KENYA_LAT_RANGE[1] and KENYA_LNG_RANGE[0] <= lng <= KENYA_LNG_RANGE[1]:
+            return {"format": "decimal", "lat": lat, "lng": lng}
+        return {
+            "error": "Coordinates outside Kenya bounding box",
+            "format": "decimal",
+            "lat": lat,
+            "lng": lng,
+        }
+
+    utm_match = re.search(
+        r"(?:UTM\s*)?(?P<zone>3[67])\s*(?P<hemi>[NS])[\s,;:]+(?P<east>\d{5,6}(?:\.\d+)?)\s*[, ]\s*(?P<north>\d{6,7}(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    if utm_match:
+        try:
+            lat, lng = _utm_to_lat_lng(
+                int(utm_match.group("zone")),
+                utm_match.group("hemi").upper(),
+                float(utm_match.group("east")),
+                float(utm_match.group("north")),
+            )
+        except Exception as exc:
+            return {"error": f"UTM conversion failed: {exc}", "format": "utm"}
+
+        if KENYA_LAT_RANGE[0] <= lat <= KENYA_LAT_RANGE[1] and KENYA_LNG_RANGE[0] <= lng <= KENYA_LNG_RANGE[1]:
+            return {"format": "utm", "lat": lat, "lng": lng}
+
+        return {
+            "error": "Converted coordinates fall outside Kenya bounding box",
+            "format": "utm",
+            "lat": lat,
+            "lng": lng,
+        }
+
+    return {"error": "No valid Kenyan coordinates found"}
+
+
+def build_record_search_queries(
+    *,
+    title_number: str,
+    owner_name: str | None = None,
+    county: str | None = None,
+) -> List[str]:
+    """Generate Step 5 mandatory record cross-check queries."""
+    county_fragment = f" {county}" if county else ""
+    zoning_authority = f'"{county} County" zoning physical planning land use compliance' if county else '"Kenya county physical planning" zoning land use compliance'
+    owner_fragment = f' "{owner_name}"' if owner_name else ""
+    return [
+        f'National Land Commission records "{title_number}"{owner_fragment}{county_fragment}',
+        f'Kenya Gazette "{title_number}" land notice{county_fragment}',
+        f'"{title_number}" "Land Registration Act 2012" conversion registry',
+        f'"{title_number}" {zoning_authority}',
+        f'"{title_number}" ownership history previous owner green card register{owner_fragment}',
+    ]

@@ -63,6 +63,7 @@ def cache_legal_context(
     You are an expert on Kenyan Land Law. 
     Use the provided cached PDF documents (Constitution, Land Act, Registration Act) 
     as your primary source of truth for legal definitions and procedures.
+    Use Chain of Verification (CoVe): extract the legal claim, verify it against the cached sources, and only then summarize.
     """
 
     try:

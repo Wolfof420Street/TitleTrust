@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: titletrust-backend
+spec:
+  selector:
+    app: titletrust-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP

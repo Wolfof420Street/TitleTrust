@@ -3,12 +3,15 @@ from firebase_admin import auth
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.firebase import initialize_firebase
+try:
+    from backend.services.firebase import initialize_firebase
+except ModuleNotFoundError:
+    from services.firebase import initialize_firebase
 
 # Ensure Firebase is initialized
 initialize_firebase()
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 import logging
 
@@ -19,7 +22,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     Validates the Firebase ID Token in the Authorization header.
     Returns the decoded token (user dict) if valid.
     """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     token = credentials.credentials
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     try:
         # Verify the ID token
         return auth.verify_id_token(token)
@@ -30,13 +37,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
             detail="Invalid authentication credentials"
         ) from e
     except auth.AuthError as e:
-        logger.error(f"Firebase Auth infrastructure error: {e}")
+        logger.exception("Firebase auth infrastructure error")
         raise HTTPException(
             status_code=503,
             detail="Authentication service unavailable"
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected authentication error: {e}")
+        logger.exception("Unexpected authentication error")
         raise HTTPException(
             status_code=401,
             detail="Authentication failed"

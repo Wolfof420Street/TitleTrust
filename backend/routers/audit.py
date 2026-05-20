@@ -7,19 +7,33 @@ from typing import Dict, Any, List
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
-from firebase_admin import firestore
 
 from auth import get_current_user
 from models import AuditRequest, Document, DocumentType, GeoCheck, LiveTokenRequest
 from forensic_engine import perform_forensic_audit
 from geospatial_engine import vision_map_sync, LiveGeospatialVerifier
 from agent.marathon_loop import MarathonLoop, AgentState, MarathonState
+from repositories.session_repository import SessionRepository
 from services.cloud_tasks import CloudTasksService
 from services.firebase import db
+from services.sync_service import FirebaseSyncService
 
 router = APIRouter(prefix="/audit", tags=["Audit"])
 logger = logging.getLogger("TitleTrust-AuditRouter")
 cloud_tasks = CloudTasksService()
+sessions_repo = SessionRepository(db)
+sync_service = FirebaseSyncService()
+ALLOWED_UPLOAD_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".mp4", ".mov"}
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+
+
+def _validate_upload(filename: str, file_size: int, allowed_suffixes: set[str]) -> str:
+    suffix = os.path.splitext(filename or "")[1].lower()
+    if suffix not in allowed_suffixes:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
+    if file_size > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail=f"File {filename} exceeds 50MB limit")
+    return suffix
 
 
 @router.post("/tick")
@@ -58,9 +72,9 @@ async def marathon_tick(payload: Dict[str, str]):
         return {"status": "success", "agent_status": status}
         
     except Exception as e:
-        logger.error(f"Tick Failed: {e}")
+        logger.exception("Tick failed")
         # Retrying handled by Cloud Tasks configuration (Queue settings)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Tick processing failed")
 
 
 @router.post("/forensic", response_model=dict)
@@ -91,19 +105,7 @@ async def create_forensic_audit(
             file_size = file.file.tell()
             file.file.seek(0)  # Reset
             
-            if file_size > 50 * 1024 * 1024:  # 50MB
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"File {file.filename} exceeds 50MB limit"
-                )
-            
-            # Create temp file
-            suffix = os.path.splitext(file.filename)[1]
-            if suffix.lower() not in ['.pdf', '.png', '.jpg', '.jpeg']:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported file type: {suffix}"
-                )
+            suffix = _validate_upload(file.filename, file_size, {".pdf", ".png", ".jpg", ".jpeg"})
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 shutil.copyfileobj(file.file, tmp)
@@ -156,8 +158,8 @@ async def create_forensic_audit(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Forensic Audit Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Audit failed: {str(e)}")
+        logger.exception("Forensic audit failed")
+        raise HTTPException(status_code=500, detail="Audit failed")
 
     finally:
         # Schedule cleanup of all temp files
@@ -170,8 +172,8 @@ async def create_forensic_audit(
 @router.post("/geospatial", response_model=GeoCheck)
 async def create_geospatial_audit(
     background_tasks: BackgroundTasks,
-    lat: float = Form(...),
-    lng: float = Form(...),
+    lat: float = Form(..., ge=-90, le=90),
+    lng: float = Form(..., ge=-180, le=180),
     file: UploadFile = File(...),
     user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -179,7 +181,10 @@ async def create_geospatial_audit(
     # This prevents loading large videos entirely into RAM
     
     # Create temp file
-    suffix = os.path.splitext(file.filename)[1]
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    suffix = _validate_upload(file.filename, file_size, ALLOWED_UPLOAD_SUFFIXES)
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
@@ -229,8 +234,8 @@ async def generate_live_token(
         return result
         
     except Exception as e:
-        logger.error(f"Failed to generate live token: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to generate live token")
+        raise HTTPException(status_code=500, detail="Live token generation failed")
 
 
 @router.post("/start")
@@ -247,7 +252,10 @@ async def start_marathon_audit(
     logger.info(f"🚀 Starting Marathon Session: {session_id}")
 
     # 1. Save File to Temp Location
-    suffix = os.path.splitext(file.filename)[1]
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    suffix = _validate_upload(file.filename, file_size, ALLOWED_UPLOAD_SUFFIXES)
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
@@ -262,12 +270,13 @@ async def start_marathon_audit(
         memory=[f"📁 Received initial file: {tmp_path}"]  # Add to memory for recovery
     )
     
-    # Save initial state to Firestore
-    db.collection("sessions").document(session_id).set({
-        **initial_state.model_dump(),
-        "user_id": user.get("uid"),
-        "created_at": firestore.SERVER_TIMESTAMP
-    })
+    # Save initial state via repository
+    sessions_repo.create(
+        session_id=session_id,
+        user_id=user.get("uid"),
+        payload=initial_state.model_dump(),
+        organization_id="default"  # TODO: Get from user context
+    )
     
     logger.info(f"✅ Session initialized with image_path: {tmp_path}")
     
@@ -303,22 +312,19 @@ async def start_marathon_audit(
         except Exception as e:
             logger.error(f"❌ BOOTSTRAP FAILED for {sid}: {e}", exc_info=True)
             
-            # Update session to failed
-            db.collection("sessions").document(sid).update({
+            # Update session to failed via repository
+            sessions_repo.update(sid, {
                 "status": "FAILED",
                 "error": f"Bootstrap failed: {str(e)}",
-                "last_update": firestore.SERVER_TIMESTAMP
             })
             
             # Notify user via sync service
             try:
-                from services.sync_service import FirebaseSyncService
-                sync = FirebaseSyncService()
-                doc = db.collection("sessions").document(sid).get()
-                if doc.exists:
-                    owner_id = doc.get("user_id")
+                session_data = sessions_repo.get(sid)
+                if session_data:
+                    owner_id = session_data.get("user_id")
                     if owner_id:
-                        sync.send_push_notification(
+                        sync_service.send_push_notification(
                             owner_id,
                             "Audit Failed to Start",
                             "There was an error initializing your audit.",
@@ -352,12 +358,10 @@ async def get_audit_status(
     Includes health check to detect stuck sessions.
     """
     try:
-        doc = db.collection("sessions").document(session_id).get()
+        data = sessions_repo.get(session_id)
         
-        if not doc.exists:
+        if not data:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        data = doc.to_dict()
         
         # Verify user owns this session
         if data.get("user_id") != user.get("uid"):
@@ -375,11 +379,10 @@ async def get_audit_status(
             if data.get("status") in ["RUNNING", "QUEUED"] and time_since_update > 300:
                 logger.warning(f"⚠️ Session {session_id} appears stuck. Last update: {time_since_update}s ago")
                 
-                # Auto-fail stuck sessions
-                db.collection("sessions").document(session_id).update({
+                # Auto-fail stuck sessions via repository
+                sessions_repo.update(session_id, {
                     "status": "FAILED",
                     "error": f"Session stuck - no update in {int(time_since_update)}s",
-                    "last_update": firestore.SERVER_TIMESTAMP
                 })
                 
                 data["status"] = "FAILED"
@@ -390,7 +393,7 @@ async def get_audit_status(
             "status": data.get("status"),
             "progress": data.get("progress_checklist", {}),
             "total_steps": data.get("total_steps", 0),
-            "last_thought": data.get("last_thought"),
+            "last_thought": data.get("latest_thought") or data.get("last_thought"),
             "error": data.get("error"),
             "findings": data.get("findings", []),
             "audit_conclusion": data.get("audit_conclusion")
@@ -399,8 +402,8 @@ async def get_audit_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Status check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Status check failed")
+        raise HTTPException(status_code=500, detail="Status lookup failed")
 
 
 @router.post("/retry/{session_id}")
@@ -413,12 +416,10 @@ async def retry_stuck_audit(
     Useful when Cloud Tasks fail or agent gets stuck.
     """
     try:
-        doc = db.collection("sessions").document(session_id).get()
+        data = sessions_repo.get(session_id)
         
-        if not doc.exists:
+        if not data:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        data = doc.to_dict()
         
         # Verify ownership
         if data.get("user_id") != user.get("uid"):
@@ -435,11 +436,10 @@ async def retry_stuck_audit(
         
         logger.info(f"🔄 Manual retry requested for session {session_id}")
         
-        # Update status to RUNNING
-        db.collection("sessions").document(session_id).update({
+        # Update status to RUNNING via repository
+        sessions_repo.update(session_id, {
             "status": "RUNNING",
             "retry_count": (data.get("retry_count", 0) + 1),
-            "last_update": firestore.SERVER_TIMESTAMP
         })
         
         # Schedule immediate tick
@@ -454,8 +454,8 @@ async def retry_stuck_audit(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Retry failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Retry failed")
+        raise HTTPException(status_code=500, detail="Retry failed")
 
 
 @router.get("/titbits")
@@ -502,7 +502,7 @@ async def get_land_titbits(user: Dict[str, Any] = Depends(get_current_user)):
              ]}
 
     except Exception as e:
-        logger.error(f"Titbits Error: {e}")
+        logger.exception("Titbits generation failed")
         # Fallback static titbits
         return {"titbits": [
              "Did you know? A Green Card is the only true proof of ownership, not the Title Deed.",

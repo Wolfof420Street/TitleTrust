@@ -1,7 +1,9 @@
 import logging
 import json
+import os
 import googlemaps
 import uuid
+import hashlib
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -11,27 +13,37 @@ from google.genai import types
 
 # Configuration
 try:
-    from config import settings
+    from backend.config import settings
 except ImportError:
-    # Fallback/Mock for standalone testing
-    class Settings:
-        GCP_PROJECT_ID = "titletrust-f5bf6"
-        VERTEX_AI_LOCATION = "us-central1"
-        MAPS_API_KEY = "dummy"
-        FORENSIC_MODEL_NAME = "gemini-3-pro-preview"
-    settings = Settings()
+    try:
+        from config import settings
+    except ImportError:
+        # Fallback/Mock for standalone testing
+        class Settings:
+            GCP_PROJECT_ID = "titletrust-f5bf6"
+            VERTEX_AI_LOCATION = "us-central1"
+            MAPS_API_KEY = "dummy"
+            FORENSIC_MODEL_NAME = "gemini-3-pro-preview"
+            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+        settings = Settings()
 
 # Import models for the adapter
 try:
-    from models import GeoCheck
+    from backend.models import GeoCheck
 except ImportError:
-    pass
+    try:
+        from models import GeoCheck
+    except ImportError:
+        pass
 
 # Import Centralized Tools
 try:
-    from agent.tools import get_satellite_ground_truth
+    from backend.agent.tools import get_satellite_ground_truth
 except ImportError:
-    pass
+    try:
+        from agent.tools import get_satellite_ground_truth
+    except ImportError:
+        get_satellite_ground_truth = None
 
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [GEO-AGENT] - %(message)s")
@@ -57,7 +69,7 @@ class GeoVerificationAgent:
         )
 
         # 1. Tool Definitions (Pass python function directly)
-        self.tools = [get_satellite_ground_truth]
+        self.tools = [t for t in (get_satellite_ground_truth,) if t is not None]
 
         # 2. System Persona (The Surveyor)
         self.system_instruction = """
@@ -71,6 +83,11 @@ class GeoVerificationAgent:
         2. **Verify**: CALL `get_satellite_ground_truth` with the provided GPS to see what the map says *should* be there.
         3. **Reason**: Detect Land Fraud (Encroachment, Grabbing, Spoofing) by comparing Vision vs. Map Data.
         </mission>
+
+        <chain_of_verification>
+        Use Chain of Verification (CoVe): identify each location claim, verify it against map or vision evidence, and only then synthesize the verdict.
+        If encroachment is detected, lead with that risk in the final reasoning rather than softening it.
+        </chain_of_verification>
         """
 
     def verify_location_integrity(self, file_path: str, lat: float, lng: float) -> Dict[str, Any]:
@@ -80,6 +97,29 @@ class GeoVerificationAgent:
         MIME type is auto-detected by the Files API.
         """
         logger.info(f"🚁 Starting Aerial/Ground Verification Loop at {lat}, {lng}")
+        # Emit start event
+        try:
+            import asyncio
+            from backend.realtime.events import emit
+
+            payload = {"lat": lat, "lng": lng, "file_id": os.path.basename(file_path)}
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(emit("agent.started", payload, severity="info"))
+            except RuntimeError:
+                import threading
+
+                def _bg():
+                    import asyncio as _asyncio
+                    from backend.realtime.events import emit as _emit
+                    try:
+                        _asyncio.run(_emit("agent.started", payload, severity="info"))
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_bg, daemon=True).start()
+        except Exception:
+            pass
         
         # 1. Upload File to Gemini (Files API)
         # This handles large files (>20MB) and videos correctly
@@ -135,7 +175,45 @@ class GeoVerificationAgent:
         # Parse Final Result
         if final_json:
             try:
-                return json.loads(final_json)
+                result = json.loads(final_json)
+                result["trace_id"] = f"geo-{uuid.uuid4().hex[:12]}"
+                result["evidence_sha256"] = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "file_id": os.path.basename(file_path),
+                            "lat": lat,
+                            "lng": lng,
+                            "response": result,
+                            "response_text": response.text if hasattr(response, "text") else None,
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
+                # Emit completion event
+                try:
+                    import asyncio
+                    from backend.realtime.events import emit
+
+                    payload = {"trace_id": result.get("trace_id"), "risk_score": result.get("risk_score"), "match_status": result.get("match_status")}
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(emit("agent.completed", payload, severity="info"))
+                    except RuntimeError:
+                        import threading
+
+                        def _bgc():
+                            import asyncio as _asyncio
+                            from backend.realtime.events import emit as _emit
+                            try:
+                                _asyncio.run(_emit("agent.completed", payload, severity="info"))
+                            except Exception:
+                                pass
+
+                        threading.Thread(target=_bgc, daemon=True).start()
+                except Exception:
+                    pass
+                return result
             except json.JSONDecodeError:
                 return {"error": "Failed to parse Agent JSON", "raw": final_json}
         
