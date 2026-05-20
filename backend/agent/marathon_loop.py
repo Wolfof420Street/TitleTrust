@@ -135,6 +135,37 @@ class MarathonState(BaseModel):
             "provider": provider,
         }
         self.progress_checklist[check_name] = True
+        # Emit realtime evidence_registration event (best-effort async)
+        try:
+            import asyncio
+            from backend.realtime.events import emit
+
+            payload = {
+                "check_name": check_name,
+                "provider": provider,
+                "trace_id": trace_id,
+                "sha256": sha256,
+                "summary": summary,
+                "metadata": metadata or {},
+            }
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(emit("agent.evidence_registered", payload, session_id=self.session_id, severity="info"))
+            except RuntimeError:
+                import threading
+
+                def _bg():
+                    import asyncio as _asyncio
+                    from backend.realtime.events import emit as _emit
+
+                    try:
+                        _asyncio.run(_emit("agent.evidence_registered", payload, session_id=self.session_id, severity="info"))
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_bg, daemon=True).start()
+        except Exception:
+            pass
 
     def has_verified_check(self, check_name: str) -> bool:
         artifact = self.verification_evidence.get(check_name) or {}
@@ -657,6 +688,36 @@ class MarathonLoop:
             else:
                 state.empty_response_count = 0 # Reset on success
             
+            # Emit decision and selected tool for real-time UI
+            try:
+                import asyncio
+                from backend.realtime.events import emit
+
+                decision = response.parsed
+                payload = {
+                    "thought_process": getattr(decision, 'thought_process', None),
+                    "next_tool": getattr(decision, 'next_tool', None),
+                    "tool_input": getattr(decision, 'tool_input', None),
+                    "confidence": getattr(decision, 'confidence', None),
+                }
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(emit("agent.tool_selected", payload, session_id=state.session_id))
+                except RuntimeError:
+                    import threading
+
+                    def _bg_dec():
+                        import asyncio as _asyncio
+                        from backend.realtime.events import emit as _emit
+                        try:
+                            _asyncio.run(_emit("agent.tool_selected", payload, session_id=state.session_id))
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_bg_dec, daemon=True).start()
+            except Exception:
+                pass
+
             return response.parsed
             
         except Exception as e:

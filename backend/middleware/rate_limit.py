@@ -33,8 +33,38 @@ async def enforce_rate_limit(request: Request) -> None:
         window_seconds=60,
     )
     if remaining <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many requests",
-            headers={"Retry-After": "60"},
-        )
+            # Emit realtime event about rate limit enforcement (best-effort)
+            try:
+                import asyncio
+                from backend.realtime.events import emit
+
+                payload = {
+                    "path": request.url.path,
+                    "ip": request.client.host if request.client else "unknown",
+                    "rule_key": key,
+                }
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(emit("security.rate_limited", payload, severity="warning", correlation_id=request.headers.get("x-correlation-id")))
+                except RuntimeError:
+                    # run in background thread if no loop
+                    import threading
+
+                    def _run_emit():
+                        try:
+                            import asyncio as _asyncio
+                            from backend.realtime.events import emit as _emit
+
+                            _asyncio.run(_emit("security.rate_limited", payload, severity="warning", correlation_id=request.headers.get("x-correlation-id")))
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_run_emit, daemon=True).start()
+            except Exception:
+                pass
+
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests",
+                headers={"Retry-After": "60"},
+            )

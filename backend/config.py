@@ -56,6 +56,19 @@ class Settings(BaseSettings):
     WORKER_TASK_TIMEOUT_SECONDS: int = Field(default=300)
     WORKER_MAX_RETRIES: int = Field(default=3)
     QUEUE_MODE: str = Field(default="inline")
+    # Realtime broadcaster
+    REDIS_PUBSUB_ENABLED: bool = Field(default=False)
+    BROADCASTER_CHANNEL: str = Field(default="titletrust:realtime")
+    BROADCASTER_REPLAY_BUFFER: int = Field(default=256)
+    BROADCASTER_MAX_QUEUE_SIZE: int = Field(default=64)
+    BROADCASTER_HEARTBEAT_INTERVAL_SECONDS: int = Field(default=15)
+    # Redis streams / durable replay
+    REDIS_STREAMS_ENABLED: bool = Field(default=False)
+    BROADCASTER_STREAM_KEY: str = Field(default="titletrust:realtime:stream")
+    BROADCASTER_STREAM_MAXLEN: int = Field(default=10000)
+    # Safety controls
+    BROADCASTER_MAX_REPLAY_WINDOW: int = Field(default=10000)
+    MAX_EVENT_PAYLOAD_BYTES: int = Field(default=64 * 1024)  # 64KB
 
     @field_validator("ENV")
     @classmethod

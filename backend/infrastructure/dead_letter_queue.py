@@ -90,6 +90,29 @@ class DeadLetterQueueRepository:
                 f"Job {event.job_id} ({event.job_type}) sent to dead-letter queue: "
                 f"{event.error_type} - {event.error_message}"
             )
+            # Emit realtime DLQ event (best-effort)
+            try:
+                import asyncio
+                from backend.realtime.events import emit
+
+                payload = {"job_id": event.job_id, "job_type": event.job_type, "error": event.error_message}
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(emit("job.dead_lettered", payload, severity="error", job_id=event.job_id))
+                except RuntimeError:
+                    import threading
+
+                    def _bg():
+                        import asyncio as _asyncio
+                        from backend.realtime.events import emit as _emit
+                        try:
+                            _asyncio.run(_emit("job.dead_lettered", payload, severity="error", job_id=event.job_id))
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_bg, daemon=True).start()
+            except Exception:
+                pass
             return event.job_id
         except Exception as exc:
             logger.error(

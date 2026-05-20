@@ -490,6 +490,32 @@ Objective, skeptical, and legally precise. Focus on evidence-based conclusions.
                     if hasattr(part, 'thought') and part.thought:
                         thought_snippet = part.thought[:ForensicConfig.MAX_THOUGHT_LOG_LENGTH]
                         logger.debug(f"Thought: {thought_snippet}...")
+                        # Stream sanitized thought to realtime (best-effort)
+                        try:
+                            import asyncio
+                            from backend.realtime.events import emit
+
+                            payload = {
+                                "file_hash": file_hash,
+                                "thought_snippet": thought_snippet,
+                            }
+                            try:
+                                loop = asyncio.get_running_loop()
+                                loop.create_task(emit("agent.thought", payload, session_id=file_hash, severity="debug"))
+                            except RuntimeError:
+                                import threading
+
+                                def _bg():
+                                    import asyncio as _asyncio
+                                    from backend.realtime.events import emit as _emit
+                                    try:
+                                        _asyncio.run(_emit("agent.thought", payload, session_id=file_hash, severity="debug"))
+                                    except Exception:
+                                        pass
+
+                                threading.Thread(target=_bg, daemon=True).start()
+                        except Exception:
+                            pass
                     
                     if hasattr(part, 'text') and part.text and "I should" in part.text:
                         text_snippet = part.text[:ForensicConfig.MAX_THOUGHT_LOG_LENGTH]

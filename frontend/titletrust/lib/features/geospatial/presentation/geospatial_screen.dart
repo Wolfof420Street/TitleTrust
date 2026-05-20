@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:permission_handler/permission_handler.dart';
+import 'package:titletrust/core/services/job_state_service.dart';
+import 'package:titletrust/realtime/debug_overlay.dart';
 import 'geospatial_controller.dart';
 
 // Helper provider to get available cameras
@@ -71,11 +73,26 @@ class _GeospatialScreenState extends ConsumerState<GeospatialScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(geospatialControllerProvider);
+    final jobState = ref.watch(jobStateServiceProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Geospatial Reality Check')),
       body: Column(
         children: [
+          FutureBuilder<String?>(
+            future: jobState.getActiveJobId(),
+            builder: (context, snapshot) {
+              final sessionId = snapshot.data;
+              if (sessionId == null || sessionId.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: RealtimeDebugOverlay(sessionId: sessionId),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
           // Camera Preview Area
           Expanded(
             flex: 2,

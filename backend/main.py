@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.api import audit_router, auth_router, health_router, upload_router
+from backend.api.realtime_router import router as realtime_router
 from backend.config import get_settings
 from backend.logging_config import configure_logging
 from backend.middleware.adaptive_protection import AdaptiveProtectionMiddleware
@@ -17,6 +18,7 @@ from backend.security.abuse_detection import AbuseDetectionEngine
 from backend.security.anomaly_detection import AnomalyDetectionEngine
 from backend.services.firebase import db
 from backend.telemetry.init import initialize_telemetry
+from backend.realtime.broadcaster import broadcaster
 
 configure_logging()
 logger = logging.getLogger("TitleTrust-Backend")
@@ -68,7 +70,26 @@ app.include_router(audit_router.router, dependencies=[Depends(enforce_rate_limit
 app.include_router(auth_router.router, dependencies=[Depends(enforce_rate_limit)])
 app.include_router(upload_router.router, dependencies=[Depends(enforce_rate_limit)])
 app.include_router(health_router.router)
+app.include_router(realtime_router)
 
 initialize_telemetry(app=app, environment=settings.ENV)
 
 logger.info("TitleTrust backend started")
+
+
+@app.on_event("startup")
+async def _realtime_startup():
+    try:
+        await broadcaster.start()
+        logger.info("Realtime broadcaster started")
+    except Exception as e:
+        logger.exception("Failed to start realtime broadcaster: %s", e)
+
+
+@app.on_event("shutdown")
+async def _realtime_shutdown():
+    try:
+        await broadcaster.stop()
+        logger.info("Realtime broadcaster stopped")
+    except Exception as e:
+        logger.exception("Failed to stop realtime broadcaster: %s", e)

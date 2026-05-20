@@ -95,6 +95,29 @@ class GeoVerificationAgent:
         MIME type is auto-detected by the Files API.
         """
         logger.info(f"🚁 Starting Aerial/Ground Verification Loop at {lat}, {lng}")
+        # Emit start event
+        try:
+            import asyncio
+            from backend.realtime.events import emit
+
+            payload = {"lat": lat, "lng": lng, "file_path": file_path}
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(emit("agent.started", payload, severity="info"))
+            except RuntimeError:
+                import threading
+
+                def _bg():
+                    import asyncio as _asyncio
+                    from backend.realtime.events import emit as _emit
+                    try:
+                        _asyncio.run(_emit("agent.started", payload, severity="info"))
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_bg, daemon=True).start()
+        except Exception:
+            pass
         
         # 1. Upload File to Gemini (Files API)
         # This handles large files (>20MB) and videos correctly
@@ -165,6 +188,29 @@ class GeoVerificationAgent:
                         default=str,
                     ).encode("utf-8")
                 ).hexdigest()
+                # Emit completion event
+                try:
+                    import asyncio
+                    from backend.realtime.events import emit
+
+                    payload = {"trace_id": result.get("trace_id"), "risk_score": result.get("risk_score"), "match_status": result.get("match_status")}
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(emit("agent.completed", payload, severity="info"))
+                    except RuntimeError:
+                        import threading
+
+                        def _bgc():
+                            import asyncio as _asyncio
+                            from backend.realtime.events import emit as _emit
+                            try:
+                                _asyncio.run(_emit("agent.completed", payload, severity="info"))
+                            except Exception:
+                                pass
+
+                        threading.Thread(target=_bgc, daemon=True).start()
+                except Exception:
+                    pass
                 return result
             except json.JSONDecodeError:
                 return {"error": "Failed to parse Agent JSON", "raw": final_json}

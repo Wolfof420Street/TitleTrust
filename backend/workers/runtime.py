@@ -201,6 +201,34 @@ class WorkerRuntime:
             )
         except Exception as exc:
             logger.warning(f"Failed to emit event {event.event_type}: {exc}")
+        # Publish structured realtime event for UI (best-effort)
+        try:
+            import asyncio
+            from backend.realtime.events import emit
+
+            envelope = {
+                "event_type": event.event_type,
+                "payload": event.payload,
+                "job_id": event.job_id,
+            }
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(emit(event.event_type, envelope, job_id=event.job_id))
+            except RuntimeError:
+                # No running loop; spawn thread to run coroutine
+                import threading
+
+                def _bg_emit(ev):
+                    import asyncio as _asyncio
+                    try:
+                        _asyncio.run(emit(ev["event_type"], ev, job_id=ev.get("job_id")))
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_bg_emit, args=(envelope,), daemon=True).start()
+        except Exception:
+            pass
 
     def _handle_forensic(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Handle forensic analysis task with timeout."""

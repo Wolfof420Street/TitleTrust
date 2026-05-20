@@ -77,6 +77,30 @@ class AdaptiveProtectionMiddleware(BaseHTTPMiddleware):
                 "abuse.blocked",
                 extra={"correlation_id": correlation_id, "tenant_id": tenant_id, "score": assessment.score},
             )
+            # Emit realtime security.blocked event
+            try:
+                import asyncio
+                from backend.realtime.events import emit
+
+                payload = {"tenant_id": tenant_id, "path": request.url.path, "score": assessment.score}
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(emit("security.blocked", payload, severity="warning", correlation_id=correlation_id))
+                except RuntimeError:
+                    import threading
+
+                    def _bg():
+                        import asyncio as _asyncio
+                        from backend.realtime.events import emit as _emit
+                        try:
+                            _asyncio.run(_emit("security.blocked", payload, severity="warning", correlation_id=correlation_id))
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_bg, daemon=True).start()
+            except Exception:
+                pass
+
             return Response(
                 content=json.dumps({"detail": "Request blocked by adaptive protection"}),
                 status_code=403,
