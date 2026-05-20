@@ -608,7 +608,7 @@ db.collection("jobs")
 #### Clone & Setup
 
 ```bash
-git clone https://github.com/yourusername/titletrust.git
+git clone https://github.com/WolfOf420Street/TitleTrust.git
 cd titletrust
 ```
 
@@ -1220,7 +1220,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-TitleTrust was developed as part of the **Google Gemini Hackathon 2024**, combining expertise in:
+TitleTrust was developed as part of the **Google Gemini Hackathon 2026**, combining expertise in:
 - **Land governance**: Understanding Kenyan title deed systems
 - **AI/ML**: Gemini vision and text analysis for forensic document analysis
 - **Distributed systems**: Resilient, offline-tolerant mobile architecture
