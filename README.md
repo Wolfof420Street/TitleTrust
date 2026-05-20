@@ -1234,7 +1234,7 @@ TitleTrust was developed as part of the **Google Gemini Hackathon 2024**, combin
 - **Bugs & Features**: Open an issue on GitHub
 - **Security**: Email security@titletrust.io (PGP key in SECURITY.md)
 - **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Discord/Community**: [Link to community channel]
+
 
 ---
 
